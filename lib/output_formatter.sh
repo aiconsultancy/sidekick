@@ -107,6 +107,8 @@ format_complete_output() {
     local all_data="$1"
     local duplicate_groups="$2"
     local format="${3:-json}"
+    local pr_metadata="${4:-}"
+    local errors="${5:-}"
     
     # Process all comments
     local formatted_comments="[]"
@@ -208,18 +210,34 @@ format_complete_output() {
     # Create timestamp separately to avoid issues
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     
+    # Parse PR metadata if provided
+    local pr_meta_json="{}"
+    if [[ -n "$pr_metadata" ]]; then
+        pr_meta_json="$pr_metadata"
+    fi
+    
+    # Parse errors if provided
+    local errors_json="[]"
+    if [[ -n "$errors" ]]; then
+        errors_json="$errors"
+    fi
+    
     local output=$(jq -n \
         --argjson comments "$formatted_comments" \
         --argjson duplicate_groups "$dup_groups_json" \
         --argjson stats "$stats" \
         --arg timestamp "$timestamp" \
+        --argjson pr_info "$pr_meta_json" \
+        --argjson errors "$errors_json" \
         '{
+            pr_info: $pr_info,
             pr_comments: $comments,
             metadata: {
                 statistics: $stats,
                 duplicate_groups: $duplicate_groups,
                 extraction_timestamp: $timestamp
-            }
+            },
+            errors: $errors
         }')
     
     # Convert to YAML if requested

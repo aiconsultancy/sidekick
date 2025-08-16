@@ -92,7 +92,7 @@ assert_contains "$output" "Invalid format" "Error message for invalid format"
 # Test 4: URL parsing
 output=$($MAIN_SCRIPT --help 2>&1)
 # Just check that the script loads correctly with URL
-assert_contains "$output" "PR Comment Extractor" "Script loads with URL argument"
+assert_contains "$output" "Usage:" "Script loads with URL argument"
 
 # Test 5: Separate arguments parsing
 # Mock test since we can't actually call the GitHub API in tests
@@ -100,7 +100,7 @@ mock_test_args() {
     # Test that the script accepts org repo pr_number format
     local test_cmd="$MAIN_SCRIPT org repo 123 --help 2>&1"
     local output=$(eval $test_cmd)
-    if [[ "$output" == *"PR Comment Extractor"* ]]; then
+    if [[ "$output" == *"Usage:"* ]]; then
         echo "true"
     else
         echo "false"
@@ -127,18 +127,29 @@ rm -f "$TEST_OUTPUT"
 for format in json yaml; do
     # Test that format flags are accepted
     output=$($MAIN_SCRIPT -f $format --help 2>&1)
-    assert_contains "$output" "PR Comment Extractor" "Script accepts $format format"
+    assert_contains "$output" "Usage:" "Script accepts $format format"
 done
 
 # Test 8: Verbose flag
 output=$($MAIN_SCRIPT -v --help 2>&1)
-assert_contains "$output" "PR Comment Extractor" "Script accepts verbose flag"
+assert_contains "$output" "Usage:" "Script accepts verbose flag"
 
-# Test 9: Multiple flags combination
+# Test 9: JSON-only flag
+output=$($MAIN_SCRIPT -j --help 2>&1)
+# In JSON-only mode, header should be suppressed
+if [[ "$output" == *"╔═══"* ]]; then
+    echo -e "${RED}✗${NC} JSON-only mode should suppress header"
+    ((TESTS_FAILED++))
+else
+    echo -e "${GREEN}✓${NC} JSON-only mode suppresses header"
+    ((TESTS_PASSED++))
+fi
+
+# Test 10: Multiple flags combination
 output=$($MAIN_SCRIPT -v -f yaml -o /tmp/test.yaml --help 2>&1)
-assert_contains "$output" "PR Comment Extractor" "Script accepts multiple flags"
+assert_contains "$output" "Usage:" "Script accepts multiple flags"
 
-# Test 10: Invalid URL format
+# Test 11: Invalid URL format
 output=$($MAIN_SCRIPT "not-a-url" 2>&1)
 exit_code=$?
 # When given a non-URL, it should treat it as org and expect more args
