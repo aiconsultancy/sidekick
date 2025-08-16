@@ -90,11 +90,19 @@ export SIDEKICK_GITHUB_REPO=myrepo
 
 ### Prerequisites
 
+0. **Modern Bash**: Install a newer bash version if needed. (likely on macOS)
+  ```bash
+  # macOS
+  brew install bash
+
+  # Ubuntu/Debian
+  sudo apt-get install bash
+  ```
 1. **GitHub CLI (gh)**: Required for API access
    ```bash
    # macOS
    brew install gh
-   
+
    # Ubuntu/Debian
    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
@@ -106,7 +114,7 @@ export SIDEKICK_GITHUB_REPO=myrepo
    ```bash
    # macOS
    brew install jq
-   
+
    # Ubuntu/Debian
    sudo apt-get install jq
    ```
@@ -121,7 +129,10 @@ export SIDEKICK_GITHUB_REPO=myrepo
 #### Quick Install (Recommended)
 ```bash
 # Install to ~/.local (user installation, no sudo required)
-curl -sSL https://github.com/OWNER/REPO/releases/download/VERSION/install.sh | bash
+curl -sSL https://github.com/aiconsultancy/sidekick/releases/latest/download/install.sh | bash
+
+# Or install a specific version
+curl -sSL https://github.com/aiconsultancy/sidekick/releases/download/v0.1.0/install.sh | bash
 ```
 
 #### Manual Installation
@@ -135,7 +146,7 @@ curl -sSL https://github.com/OWNER/REPO/releases/download/VERSION/install.sh | b
    ```bash
    # User installation (recommended, no sudo)
    make install
-   
+
    # Or system-wide installation
    make install-system
    ```

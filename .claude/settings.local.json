@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(~/.local/bin/sidekick:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -9,10 +9,11 @@
 set -e
 
 # Configuration
-INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local}"
 REPO_OWNER="${REPO_OWNER:-}"
 REPO_NAME="${REPO_NAME:-}"
 VERSION="${VERSION:-latest}"
+UPDATE_SHELL_RC="${UPDATE_SHELL_RC:-ask}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,6 +48,48 @@ detect_os() {
     else
         echo "unknown"
     fi
+}
+
+# Detect shell
+detect_shell() {
+    if [ -n "$BASH_VERSION" ]; then
+        echo "bash"
+    elif [ -n "$ZSH_VERSION" ]; then
+        echo "zsh"
+    else
+        # Fallback to checking SHELL variable
+        case "$SHELL" in
+            */bash) echo "bash" ;;
+            */zsh) echo "zsh" ;;
+            *) echo "unknown" ;;
+        esac
+    fi
+}
+
+# Get shell RC file
+get_shell_rc() {
+    local shell_type="$1"
+    case "$shell_type" in
+        bash)
+            if [ -f "$HOME/.bashrc" ]; then
+                echo "$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then
+                echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.bashrc"
+            fi
+            ;;
+        zsh)
+            if [ -f "$HOME/.zshrc" ]; then
+                echo "$HOME/.zshrc"
+            else
+                echo "$HOME/.zshrc"
+            fi
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
 }
 
 # Check for required dependencies
@@ -145,52 +188,101 @@ install_sidekick() {
     # Install files
     print_info "Installing Sidekick to $INSTALL_DIR..."
     
-    # Check if we need sudo
-    if [ -w "$INSTALL_DIR" ]; then
-        SUDO=""
-    else
-        SUDO="sudo"
-        print_warning "Installation requires sudo access"
-    fi
-    
+    # No sudo needed for user installation
     # Create installation directories
-    $SUDO mkdir -p "$INSTALL_DIR/share/sidekick"
-    $SUDO mkdir -p "$INSTALL_DIR/bin"
+    mkdir -p "$INSTALL_DIR/share/sidekick"
+    mkdir -p "$INSTALL_DIR/bin"
     
     # Copy files
-    $SUDO cp -r "$extract_dir"/{sidekick,plugins,lib} "$INSTALL_DIR/share/sidekick/" 2>/dev/null || {
+    cp -r "$extract_dir"/{sidekick,plugins,lib} "$INSTALL_DIR/share/sidekick/" 2>/dev/null || {
         print_error "Failed to copy sidekick files"
         exit 1
     }
     
     # Copy schema if it exists
     if [ -d "$extract_dir/schema" ]; then
-        $SUDO cp -r "$extract_dir/schema" "$INSTALL_DIR/share/sidekick/"
+        cp -r "$extract_dir/schema" "$INSTALL_DIR/share/sidekick/"
     fi
     
     # Make scripts executable
-    $SUDO chmod +x "$INSTALL_DIR/share/sidekick/sidekick"
-    $SUDO find "$INSTALL_DIR/share/sidekick/plugins" -type f -exec chmod +x {} \;
+    chmod +x "$INSTALL_DIR/share/sidekick/sidekick"
+    find "$INSTALL_DIR/share/sidekick/plugins" -type f -exec chmod +x {} \;
     
     # Create symlink
-    $SUDO ln -sf "$INSTALL_DIR/share/sidekick/sidekick" "$INSTALL_DIR/bin/sidekick"
+    ln -sf "$INSTALL_DIR/share/sidekick/sidekick" "$INSTALL_DIR/bin/sidekick"
     
     # Store version
-    echo "$version" | $SUDO tee "$INSTALL_DIR/share/sidekick/VERSION" > /dev/null
+    echo "$version" > "$INSTALL_DIR/share/sidekick/VERSION"
     
     print_success "Sidekick $version installed successfully!"
 }
 
+# Check and update PATH
+check_and_update_path() {
+    local bin_dir="$INSTALL_DIR/bin"
+    local shell_type=$(detect_shell)
+    local shell_rc=$(get_shell_rc "$shell_type")
+    
+    # Check if bin directory is in PATH
+    if [[ ":$PATH:" == *":$bin_dir:"* ]]; then
+        print_success "$bin_dir is already in PATH"
+        return 0
+    fi
+    
+    print_warning "$bin_dir is not in your PATH"
+    
+    # If we can't detect the shell or RC file, just show manual instructions
+    if [ -z "$shell_rc" ] || [ "$shell_type" = "unknown" ]; then
+        print_info "Add this line to your shell configuration file:"
+        print_info "  export PATH=\"$bin_dir:\$PATH\""
+        return 1
+    fi
+    
+    # Ask user if they want to update their shell RC file
+    if [ "$UPDATE_SHELL_RC" = "ask" ]; then
+        echo
+        read -p "Would you like to add $bin_dir to your PATH in $shell_rc? [Y/n] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            UPDATE_SHELL_RC="yes"
+        else
+            UPDATE_SHELL_RC="no"
+        fi
+    fi
+    
+    if [ "$UPDATE_SHELL_RC" = "yes" ]; then
+        # Check if PATH export already exists for our directory
+        if grep -q "$bin_dir" "$shell_rc" 2>/dev/null; then
+            print_info "PATH configuration already exists in $shell_rc"
+        else
+            # Add PATH export to shell RC file
+            {
+                echo ""
+                echo "# Added by Sidekick installer on $(date)"
+                echo "export PATH=\"$bin_dir:\$PATH\""
+            } >> "$shell_rc"
+            
+            print_success "Added PATH configuration to $shell_rc"
+            print_info "Run this command to update your current session:"
+            print_info "  export PATH=\"$bin_dir:\$PATH\""
+            print_info "Or start a new terminal session"
+        fi
+    else
+        print_info "To add sidekick to your PATH, add this line to $shell_rc:"
+        print_info "  export PATH=\"$bin_dir:\$PATH\""
+    fi
+    
+    # Export for current session if not in PATH
+    if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+        export PATH="$bin_dir:$PATH"
+    fi
+}
+
 # Verify installation
 verify_installation() {
-    if command -v sidekick &> /dev/null; then
-        print_success "Sidekick is available in PATH"
-        print_info "Run 'sidekick --help' to get started"
-        return 0
-    elif [ -x "$INSTALL_DIR/bin/sidekick" ]; then
-        print_warning "Sidekick installed but not in PATH"
-        print_info "Add $INSTALL_DIR/bin to your PATH:"
-        print_info "  export PATH=\"$INSTALL_DIR/bin:\$PATH\""
+    if [ -x "$INSTALL_DIR/bin/sidekick" ]; then
+        print_success "Sidekick installed successfully!"
+        check_and_update_path
         return 0
     else
         print_error "Installation verification failed"
@@ -235,9 +327,15 @@ main() {
     
     # Show next steps
     echo "Next steps:"
-    echo "1. Ensure GitHub CLI is authenticated: gh auth login"
-    echo "2. Try it out: sidekick --help"
-    echo "3. Extract PR comments: sidekick get pr-comments https://github.com/org/repo/pull/123"
+    if [[ ":$PATH:" != *":$INSTALL_DIR/bin:"* ]]; then
+        echo "1. Add sidekick to your PATH (see instructions above)"
+        echo "2. Ensure GitHub CLI is authenticated: gh auth login"
+        echo "3. Try it out: sidekick --help"
+    else
+        echo "1. Ensure GitHub CLI is authenticated: gh auth login"
+        echo "2. Try it out: sidekick --help"
+        echo "3. Extract PR comments: sidekick get pr-comments https://github.com/org/repo/pull/123"
+    fi
     echo
     echo "For more information, visit: https://github.com/$REPO_OWNER/$REPO_NAME"
 }

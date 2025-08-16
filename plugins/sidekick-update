@@ -83,7 +83,9 @@ get_current_version() {
     local version_file=""
     
     # Check common installation locations
-    if [ -f "/usr/local/share/sidekick/VERSION" ]; then
+    if [ -f "$HOME/.local/share/sidekick/VERSION" ]; then
+        version_file="$HOME/.local/share/sidekick/VERSION"
+    elif [ -f "/usr/local/share/sidekick/VERSION" ]; then
         version_file="/usr/local/share/sidekick/VERSION"
     elif [ -f "$SCRIPT_DIR/VERSION" ]; then
         version_file="$SCRIPT_DIR/VERSION"

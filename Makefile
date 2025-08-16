@@ -40,11 +40,31 @@ test: ## Run test suite
 	@echo "Running tests..."
 	@bash run_tests.sh
 
-install: ## Install sidekick locally
+install: ## Install sidekick locally (user directory)
+	@echo "Installing sidekick to ~/.local/bin..."
+	@mkdir -p ~/.local/share/sidekick
+	@mkdir -p ~/.local/bin
+	@cp -r sidekick plugins lib ~/.local/share/sidekick/
+	@if [ -d schema ]; then cp -r schema ~/.local/share/sidekick/; fi
+	@cp VERSION ~/.local/share/sidekick/ 2>/dev/null || echo "v0.1.0" > ~/.local/share/sidekick/VERSION
+	@ln -sf ~/.local/share/sidekick/sidekick ~/.local/bin/sidekick
+	@echo "Sidekick installed successfully!"
+	@if echo "$$PATH" | grep -q "$$HOME/.local/bin"; then \
+		echo "Run 'sidekick --help' to get started"; \
+	else \
+		echo "Add ~/.local/bin to your PATH:"; \
+		echo "  export PATH=\"$$HOME/.local/bin:$$PATH\""; \
+		echo "Then run 'sidekick --help' to get started"; \
+	fi
+
+install-system: ## Install sidekick system-wide (requires sudo)
 	@echo "Installing sidekick to /usr/local/bin..."
+	@sudo mkdir -p /usr/local/share/sidekick
 	@sudo mkdir -p /usr/local/bin
-	@sudo cp -r sidekick plugins lib /usr/local/share/
-	@sudo ln -sf /usr/local/share/sidekick /usr/local/bin/sidekick
+	@sudo cp -r sidekick plugins lib /usr/local/share/sidekick/
+	@if [ -d schema ]; then sudo cp -r schema /usr/local/share/sidekick/; fi
+	@sudo cp VERSION /usr/local/share/sidekick/ 2>/dev/null || echo "v0.1.0" | sudo tee /usr/local/share/sidekick/VERSION > /dev/null
+	@sudo ln -sf /usr/local/share/sidekick/sidekick /usr/local/bin/sidekick
 	@echo "Sidekick installed successfully!"
 	@echo "Run 'sidekick --help' to get started"
 
