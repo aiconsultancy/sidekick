@@ -12,6 +12,8 @@ LIMIT=10
 STATE="open"
 ORG=""
 REPO=""
+JSON_OUTPUT=false
+JSON_ONLY=false
 
 usage() {
     cat << EOF
@@ -22,6 +24,8 @@ List pull requests for a GitHub repository.
 Options:
     -l, --limit NUM    Number of PRs to show (default: 10)
     -s, --state STATE  PR state: open, closed, all (default: open)
+    -j, --json         Output in JSON format
+    --json-only        Output only JSON, no decorative text
     -h, --help         Show this help message
 
 Arguments:
@@ -32,6 +36,8 @@ Examples:
     sidekick list-prs                    # Use environment defaults
     sidekick list-prs facebook react     # Specific repo
     sidekick list-prs -l 20 -s all      # Show 20 PRs, all states
+    sidekick list-prs -j                 # Output as JSON
+    sidekick list-prs --json-only       # Clean JSON output
 
 Environment:
     SIDEKICK_GITHUB_ORG     Default organization
@@ -49,6 +55,15 @@ while [[ $# -gt 0 ]]; do
         -s|--state)
             STATE="$2"
             shift 2
+            ;;
+        -j|--json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --json-only)
+            JSON_OUTPUT=true
+            JSON_ONLY=true
+            shift
             ;;
         -h|--help)
             usage
@@ -93,19 +108,78 @@ if ! gh auth status >/dev/null 2>&1; then
     exit 1
 fi
 
-# List PRs
-echo "📋 Pull Requests for $ORG/$REPO (state: $STATE, limit: $LIMIT)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# Fetch and display PRs
-gh pr list \
-    --repo "$ORG/$REPO" \
-    --state "$STATE" \
-    --limit "$LIMIT"
-
-if [[ $? -ne 0 ]]; then
+# Fetch PRs
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # JSON output mode
+    if [[ "$JSON_ONLY" != "true" ]]; then
+        echo "📋 Fetching Pull Requests for $ORG/$REPO..." >&2
+    fi
+    
+    # Fetch as JSON with available fields
+    pr_json=$(gh pr list \
+        --repo "$ORG/$REPO" \
+        --state "$STATE" \
+        --limit "$LIMIT" \
+        --json number,title,author,state,createdAt,updatedAt,url,headRefName,baseRefName,isDraft,labels,assignees,body 2>&1)
+    
+    if [[ $? -ne 0 ]]; then
+        if [[ "$JSON_ONLY" == "true" ]]; then
+            echo '{"error": "Failed to fetch PRs"}' 
+        else
+            echo "Failed to fetch PRs. Check that the repository exists and you have access." >&2
+        fi
+        exit 1
+    fi
+    
+    # Add metadata
+    pr_count=$(echo "$pr_json" | jq 'length')
+    
+    # Build complete JSON output
+    output_json=$(jq -n \
+        --arg org "$ORG" \
+        --arg repo "$REPO" \
+        --arg state "$STATE" \
+        --arg limit "$LIMIT" \
+        --arg count "$pr_count" \
+        --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+        --argjson prs "$pr_json" \
+        '{
+            repository: {
+                organization: $org,
+                name: $repo
+            },
+            query: {
+                state: $state,
+                limit: ($limit | tonumber),
+                returned: ($count | tonumber)
+            },
+            pull_requests: $prs,
+            metadata: {
+                fetched_at: $timestamp
+            }
+        }')
+    
+    echo "$output_json"
+    
+    if [[ "$JSON_ONLY" != "true" ]]; then
+        echo "" >&2
+        echo "✓ Found $pr_count pull requests" >&2
+    fi
+else
+    # Traditional table output
+    echo "📋 Pull Requests for $ORG/$REPO (state: $STATE, limit: $LIMIT)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "Failed to fetch PRs. Check that the repository exists and you have access."
-    exit 1
+    
+    # Fetch and display PRs
+    gh pr list \
+        --repo "$ORG/$REPO" \
+        --state "$STATE" \
+        --limit "$LIMIT"
+    
+    if [[ $? -ne 0 ]]; then
+        echo ""
+        echo "Failed to fetch PRs. Check that the repository exists and you have access."
+        exit 1
+    fi
 fi
