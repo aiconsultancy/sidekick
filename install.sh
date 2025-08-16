@@ -1,291 +1,246 @@
 #!/bin/bash
-#
-# Ultraspec Quick Install Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/aiconsultancy/ultraspec/main/install.sh | bash
-#
-# This script downloads and runs the ultraspec initialization
+
+# Sidekick Installer Script
+# This script can be run with:
+#   curl -sSL https://github.com/OWNER/REPO/releases/download/VERSION/install.sh | bash
+# Or downloaded and run locally:
+#   ./install.sh
 
 set -e
+
+# Configuration
+INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
+REPO_OWNER="${REPO_OWNER:-}"
+REPO_NAME="${REPO_NAME:-}"
+VERSION="${VERSION:-latest}"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Helper functions
+print_error() {
+    echo -e "${RED}Error: $1${NC}" >&2
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}✓ $1${NC}"
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+print_info() {
+    echo -e "${BLUE}→ $1${NC}"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}⚠ $1${NC}"
 }
 
-# ASCII Art Banner
-show_banner() {
-    echo -e "${BLUE}"
-    cat << "EOF"
-╦ ╦╦ ╔╦╗╦═╗╔═╗╔═╗╔═╗╔═╗╔═╗
-║ ║║  ║ ╠╦╝╠═╣╚═╗╠═╝║╣ ║  
-╚═╝╩═╝╩ ╩╚═╩ ╩╚═╝╩  ╚═╝╚═╝
-EOF
-    echo -e "${NC}"
-    echo "Spec-Driven Development for Claude Code"
-    echo "========================================"
-    echo ""
-}
-
-# Function to show usage
-usage() {
-    echo "Usage: curl -fsSL https://raw.githubusercontent.com/aiconsultancy/ultraspec/main/install.sh | bash -s -- [OPTIONS]"
-    echo ""
-    echo "Options:"
-    echo "  --path PATH      Project path (default: current directory)"
-    echo "  --name NAME      Project name"
-    echo "  --stack STACK    Technology stack (see below)"
-    echo "  --help           Show this help message"
-    echo ""
-    echo "Available stacks:"
-    echo "  dotnet          .NET (C#)"
-    echo "  node-pnpm       Node.js + pnpm"
-    echo "  bun             Bun"
-    echo "  golang          Go"
-    echo "  multi-stack     Frontend + Backend combination"
-    echo ""
-    echo "Examples:"
-    echo "  curl -fsSL ... | bash -s -- --name 'My App' --stack node-pnpm"
-    echo "  curl -fsSL ... | bash -s -- --path ~/projects/myapp --stack multi-stack"
-}
-
-# Default values
-PROJECT_PATH=""
-PROJECT_NAME=""
-STACK=""
-TEMP_DIR=""
-
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --path)
-            PROJECT_PATH="$2"
-            shift 2
-            ;;
-        --name)
-            PROJECT_NAME="$2"
-            shift 2
-            ;;
-        --stack)
-            STACK="$2"
-            shift 2
-            ;;
-        --help)
-            show_banner
-            usage
-            exit 0
-            ;;
-        *)
-            print_error "Unknown option: $1"
-            usage
-            exit 1
-            ;;
-    esac
-done
-
-# Show banner
-show_banner
-
-# Check for required tools
-check_requirements() {
-    local missing_tools=()
-    
-    if ! command -v git &> /dev/null; then
-        missing_tools+=("git")
-    fi
-    
-    if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
-        missing_tools+=("curl or wget")
-    fi
-    
-    if [ ${#missing_tools[@]} -ne 0 ]; then
-        print_error "Missing required tools: ${missing_tools[*]}"
-        print_info "Please install the missing tools and try again."
-        exit 1
-    fi
-}
-
-# Download ultraspec
-download_ultraspec() {
-    print_info "Downloading ultraspec..."
-    
-    # Create temporary directory
-    TEMP_DIR=$(mktemp -d)
-    cd "$TEMP_DIR"
-    
-    # Download methods
-    if command -v curl &> /dev/null; then
-        curl -fsSL https://github.com/aiconsultancy/ultraspec/archive/main.tar.gz | tar -xz
-    elif command -v wget &> /dev/null; then
-        wget -qO- https://github.com/aiconsultancy/ultraspec/archive/main.tar.gz | tar -xz
+# Detect OS
+detect_os() {
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
     else
-        print_error "Neither curl nor wget found. Cannot download ultraspec."
-        exit 1
-    fi
-    
-    if [ ! -d "ultraspec-main" ]; then
-        print_error "Failed to download ultraspec"
-        exit 1
-    fi
-    
-    print_success "Downloaded ultraspec"
-}
-
-# Check if running interactively
-is_interactive() {
-    # Check if stdin is a terminal
-    [ -t 0 ]
-}
-
-# Interactive setup
-interactive_setup() {
-    # Check if we can run interactively
-    if ! is_interactive; then
-        print_error "This script requires interactive input when run without parameters."
-        print_info "Please either:"
-        print_info "  1. Download and run locally: "
-        print_info "     curl -fsSL https://raw.githubusercontent.com/aiconsultancy/ultraspec/main/install.sh -o install.sh"
-        print_info "     bash install.sh"
-        print_info ""
-        print_info "  2. Or provide all parameters:"
-        print_info "     curl -fsSL ... | bash -s -- --name 'MyApp' --stack node-pnpm --path ./myapp"
-        exit 1
-    fi
-    
-    # Get project path if not provided
-    if [ -z "$PROJECT_PATH" ]; then
-        read -p "Enter project path (default: current directory): " input_path
-        PROJECT_PATH="${input_path:-$(pwd)}"
-    fi
-    
-    # Get project name if not provided
-    if [ -z "$PROJECT_NAME" ]; then
-        read -p "Enter project name: " PROJECT_NAME
-        while [ -z "$PROJECT_NAME" ]; do
-            print_warning "Project name is required"
-            read -p "Enter project name: " PROJECT_NAME
-        done
-    fi
-    
-    # Get stack if not provided
-    if [ -z "$STACK" ]; then
-        echo ""
-        echo "Select project type:"
-        echo "1) Single Stack - .NET (C#)"
-        echo "2) Single Stack - Node.js + pnpm"
-        echo "3) Single Stack - Bun"
-        echo "4) Single Stack - Go"
-        echo "5) Multi-Stack - Frontend + Backend"
-        echo "6) None (generic)"
-        read -p "Enter choice (1-6): " choice
-        
-        case $choice in
-            1) STACK="dotnet" ;;
-            2) STACK="node-pnpm" ;;
-            3) STACK="bun" ;;
-            4) STACK="golang" ;;
-            5) STACK="multi-stack" ;;
-            6) STACK="generic" ;;
-            *)
-                print_error "Invalid choice"
-                exit 1
-                ;;
-        esac
+        echo "unknown"
     fi
 }
 
-# Run the initialization
-run_init() {
-    print_info "Initializing project..."
+# Check for required dependencies
+check_dependencies() {
+    local missing_deps=()
     
-    # Make init script executable
-    chmod +x "$TEMP_DIR/ultraspec-main/init-ultraspec.sh"
-    
-    # Run initialization
-    "$TEMP_DIR/ultraspec-main/init-ultraspec.sh" "$PROJECT_PATH" \
-        --stack "$STACK" \
-        --name "$PROJECT_NAME"
-    
-    local exit_code=$?
-    
-    # Cleanup
-    rm -rf "$TEMP_DIR"
-    
-    return $exit_code
-}
-
-# Main execution
-main() {
-    # Check requirements
-    check_requirements
-    
-    # Interactive setup if needed (or validate parameters)
-    if [ -z "$PROJECT_NAME" ] || [ -z "$STACK" ]; then
-        interactive_setup
-    fi
-    
-    # Set default path if not provided
-    if [ -z "$PROJECT_PATH" ]; then
-        PROJECT_PATH="$(pwd)"
-    fi
-    
-    # Confirm settings only if interactive
-    if is_interactive; then
-        echo ""
-        print_info "Project settings:"
-        echo "  Path: $PROJECT_PATH"
-        echo "  Name: $PROJECT_NAME"
-        echo "  Stack: $STACK"
-        echo ""
-        read -p "Continue with these settings? [Y/n] " confirm
-        
-        if [[ "$confirm" =~ ^[Nn] ]]; then
-            print_info "Setup cancelled"
-            exit 0
+    # Check for required commands
+    for cmd in curl tar; do
+        if ! command -v "$cmd" &> /dev/null; then
+            missing_deps+=("$cmd")
         fi
-    else
-        print_info "Installing with: path=$PROJECT_PATH, name=$PROJECT_NAME, stack=$STACK"
+    done
+    
+    # Check for GitHub CLI (required for sidekick)
+    if ! command -v gh &> /dev/null; then
+        print_warning "GitHub CLI (gh) is not installed. Sidekick requires it for GitHub operations."
+        print_info "Install it from: https://cli.github.com/"
     fi
     
-    # Download and run
-    download_ultraspec
+    # Check for jq (required for sidekick)
+    if ! command -v jq &> /dev/null; then
+        print_warning "jq is not installed. Sidekick requires it for JSON processing."
+        print_info "Install with: brew install jq (macOS) or apt-get install jq (Linux)"
+    fi
     
-    if run_init; then
-        print_success "Project initialized successfully!"
-        echo ""
-        print_info "Next steps:"
-        echo "  1. cd $PROJECT_PATH"
-        echo "  2. Review CLAUDE.md for project guidance"
-        echo "  3. Run 'make help' to see available commands"
-        echo "  4. In Claude Code, use /spec-create to start your first spec"
-        echo ""
-        print_success "Happy coding with ultraspec! 🚀"
-    else
-        print_error "Failed to initialize project"
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        print_error "Missing required dependencies: ${missing_deps[*]}"
+        print_info "Please install the missing dependencies and try again."
         exit 1
     fi
 }
 
-# Handle errors
-trap 'rm -rf "$TEMP_DIR"; exit 1' ERR INT TERM
+# Auto-detect GitHub repository from git remote if not provided
+detect_repo() {
+    if [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
+        if command -v git &> /dev/null && git remote get-url origin &> /dev/null; then
+            local remote_url=$(git remote get-url origin)
+            REPO_OWNER=$(echo "$remote_url" | sed -E 's/.*[:/]([^/]+)\/[^/]+\.git/\1/')
+            REPO_NAME=$(echo "$remote_url" | sed -E 's/.*\/([^/]+)\.git/\1/')
+            print_info "Detected repository: $REPO_OWNER/$REPO_NAME"
+        else
+            print_error "Could not detect repository. Please set REPO_OWNER and REPO_NAME environment variables."
+            print_info "Example: REPO_OWNER=myorg REPO_NAME=sidekick ./install.sh"
+            exit 1
+        fi
+    fi
+}
+
+# Get the latest release version
+get_latest_version() {
+    local api_url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+    local version=$(curl -s "$api_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    
+    if [ -z "$version" ]; then
+        print_error "Could not fetch latest version from GitHub"
+        exit 1
+    fi
+    
+    echo "$version"
+}
+
+# Download and install Sidekick
+install_sidekick() {
+    local version="$1"
+    local os=$(detect_os)
+    
+    # Create temp directory
+    local temp_dir=$(mktemp -d)
+    trap "rm -rf $temp_dir" EXIT
+    
+    print_info "Downloading Sidekick $version..."
+    
+    # Construct download URL
+    local download_url="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$version/sidekick-$version.tar.gz"
+    
+    # Download tarball
+    if ! curl -L -o "$temp_dir/sidekick.tar.gz" "$download_url" 2>/dev/null; then
+        print_error "Failed to download Sidekick from $download_url"
+        exit 1
+    fi
+    
+    # Extract tarball
+    print_info "Extracting files..."
+    if ! tar -xzf "$temp_dir/sidekick.tar.gz" -C "$temp_dir"; then
+        print_error "Failed to extract tarball"
+        exit 1
+    fi
+    
+    # Find extracted directory
+    local extract_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "sidekick-*" | head -1)
+    if [ -z "$extract_dir" ]; then
+        print_error "Could not find extracted directory"
+        exit 1
+    fi
+    
+    # Install files
+    print_info "Installing Sidekick to $INSTALL_DIR..."
+    
+    # Check if we need sudo
+    if [ -w "$INSTALL_DIR" ]; then
+        SUDO=""
+    else
+        SUDO="sudo"
+        print_warning "Installation requires sudo access"
+    fi
+    
+    # Create installation directories
+    $SUDO mkdir -p "$INSTALL_DIR/share/sidekick"
+    $SUDO mkdir -p "$INSTALL_DIR/bin"
+    
+    # Copy files
+    $SUDO cp -r "$extract_dir"/{sidekick,plugins,lib} "$INSTALL_DIR/share/sidekick/" 2>/dev/null || {
+        print_error "Failed to copy sidekick files"
+        exit 1
+    }
+    
+    # Copy schema if it exists
+    if [ -d "$extract_dir/schema" ]; then
+        $SUDO cp -r "$extract_dir/schema" "$INSTALL_DIR/share/sidekick/"
+    fi
+    
+    # Make scripts executable
+    $SUDO chmod +x "$INSTALL_DIR/share/sidekick/sidekick"
+    $SUDO find "$INSTALL_DIR/share/sidekick/plugins" -type f -exec chmod +x {} \;
+    
+    # Create symlink
+    $SUDO ln -sf "$INSTALL_DIR/share/sidekick/sidekick" "$INSTALL_DIR/bin/sidekick"
+    
+    # Store version
+    echo "$version" | $SUDO tee "$INSTALL_DIR/share/sidekick/VERSION" > /dev/null
+    
+    print_success "Sidekick $version installed successfully!"
+}
+
+# Verify installation
+verify_installation() {
+    if command -v sidekick &> /dev/null; then
+        print_success "Sidekick is available in PATH"
+        print_info "Run 'sidekick --help' to get started"
+        return 0
+    elif [ -x "$INSTALL_DIR/bin/sidekick" ]; then
+        print_warning "Sidekick installed but not in PATH"
+        print_info "Add $INSTALL_DIR/bin to your PATH:"
+        print_info "  export PATH=\"$INSTALL_DIR/bin:\$PATH\""
+        return 0
+    else
+        print_error "Installation verification failed"
+        return 1
+    fi
+}
+
+# Main installation flow
+main() {
+    echo "======================================"
+    echo "     Sidekick Installation Script     "
+    echo "======================================"
+    echo
+    
+    # Check dependencies
+    print_info "Checking dependencies..."
+    check_dependencies
+    print_success "Dependencies satisfied"
+    
+    # Detect repository if needed
+    detect_repo
+    
+    # Get version to install
+    if [ "$VERSION" == "latest" ]; then
+        print_info "Fetching latest version..."
+        VERSION=$(get_latest_version)
+    fi
+    print_info "Installing version: $VERSION"
+    
+    # Install Sidekick
+    install_sidekick "$VERSION"
+    
+    # Verify installation
+    echo
+    verify_installation
+    
+    echo
+    echo "======================================"
+    echo "     Installation Complete!           "
+    echo "======================================"
+    echo
+    
+    # Show next steps
+    echo "Next steps:"
+    echo "1. Ensure GitHub CLI is authenticated: gh auth login"
+    echo "2. Try it out: sidekick --help"
+    echo "3. Extract PR comments: sidekick get pr-comments https://github.com/org/repo/pull/123"
+    echo
+    echo "For more information, visit: https://github.com/$REPO_OWNER/$REPO_NAME"
+}
 
 # Run main function
-main
+main "$@"

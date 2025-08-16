@@ -1,55 +1,126 @@
-# Base Makefile for Ultraspec projects
-# This provides common targets that can be extended per stack
+# Sidekick - Makefile for building and releasing
+SHELL := /bin/bash
 
-.PHONY: help init build test format lint clean
+# Version
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+RELEASE_VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
 
-# Default target - show help
-help:
-	@echo "Ultraspec Project Makefile"
+# Directories
+BUILD_DIR := build
+DIST_DIR := dist
+RELEASE_NAME := sidekick-$(RELEASE_VERSION)
+RELEASE_TAR := $(RELEASE_NAME).tar.gz
+
+# GitHub release info
+GITHUB_OWNER ?= $(shell git remote get-url origin | sed -E 's/.*[:/]([^/]+)\/[^/]+\.git/\1/')
+GITHUB_REPO ?= $(shell git remote get-url origin | sed -E 's/.*\/([^/]+)\.git/\1/')
+
+.PHONY: all clean test install release release-tar release-github help version
+
+all: help
+
+help: ## Show this help message
+	@echo "Sidekick Makefile"
+	@echo "================="
 	@echo ""
-	@echo "Common targets:"
-	@echo "  make init     - Initialize project dependencies"
-	@echo "  make build    - Build the project"
-	@echo "  make test     - Run tests"
-	@echo "  make format   - Format code"
-	@echo "  make lint     - Run linters"
-	@echo "  make clean    - Clean build artifacts"
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Spec workflow:"
-	@echo "  make spec-status - Show spec status"
-	@echo ""
+	@echo "Current version: $(VERSION)"
+	@echo "Release version: $(RELEASE_VERSION)"
 
-# Initialize project
-init:
-	@echo "Initializing project..."
-	@echo "Override this target in your Makefile"
+version: ## Display current version
+	@echo "Current version: $(VERSION)"
+	@echo "Release version: $(RELEASE_VERSION)"
 
-# Build project
-build:
-	@echo "Building project..."
-	@echo "Override this target in your Makefile"
+clean: ## Clean build artifacts
+	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-# Run tests
-test:
+test: ## Run test suite
 	@echo "Running tests..."
-	@echo "Override this target in your Makefile"
+	@bash run_tests.sh
 
-# Format code
-format:
-	@echo "Formatting code..."
-	@echo "Override this target in your Makefile"
+install: ## Install sidekick locally
+	@echo "Installing sidekick to /usr/local/bin..."
+	@sudo mkdir -p /usr/local/bin
+	@sudo cp -r sidekick plugins lib /usr/local/share/
+	@sudo ln -sf /usr/local/share/sidekick /usr/local/bin/sidekick
+	@echo "Sidekick installed successfully!"
+	@echo "Run 'sidekick --help' to get started"
 
-# Run linters
-lint:
-	@echo "Running linters..."
-	@echo "Override this target in your Makefile"
+release-tar: clean ## Create release tarball
+	@echo "Creating release tarball $(RELEASE_TAR)..."
+	@mkdir -p $(DIST_DIR)
+	@mkdir -p $(BUILD_DIR)/$(RELEASE_NAME)
+	
+	# Copy core files
+	@cp -r sidekick plugins lib $(BUILD_DIR)/$(RELEASE_NAME)/
+	@cp README.md LICENSE* $(BUILD_DIR)/$(RELEASE_NAME)/ 2>/dev/null || true
+	
+	# Copy schema if it exists
+	@if [ -d schema ]; then cp -r schema $(BUILD_DIR)/$(RELEASE_NAME)/; fi
+	
+	# Create version file
+	@echo "$(RELEASE_VERSION)" > $(BUILD_DIR)/$(RELEASE_NAME)/VERSION
+	
+	# Create tarball
+	@tar -czf $(DIST_DIR)/$(RELEASE_TAR) -C $(BUILD_DIR) $(RELEASE_NAME)
+	@echo "Release tarball created: $(DIST_DIR)/$(RELEASE_TAR)"
+	
+	# Calculate checksums
+	@cd $(DIST_DIR) && sha256sum $(RELEASE_TAR) > $(RELEASE_TAR).sha256
+	@echo "Checksum created: $(DIST_DIR)/$(RELEASE_TAR).sha256"
 
-# Clean build artifacts
-clean:
-	@echo "Cleaning..."
-	@echo "Override this target in your Makefile"
+release-github: release-tar ## Create GitHub release
+	@echo "Creating GitHub release $(RELEASE_VERSION)..."
+	@if ! command -v gh &> /dev/null; then \
+		echo "Error: GitHub CLI (gh) is required but not installed"; \
+		exit 1; \
+	fi
+	
+	# Check if release already exists
+	@if gh release view $(RELEASE_VERSION) --repo $(GITHUB_OWNER)/$(GITHUB_REPO) &>/dev/null; then \
+		echo "Release $(RELEASE_VERSION) already exists. Delete it first or bump version."; \
+		exit 1; \
+	fi
+	
+	# Create release
+	@gh release create $(RELEASE_VERSION) \
+		--repo $(GITHUB_OWNER)/$(GITHUB_REPO) \
+		--title "Sidekick $(RELEASE_VERSION)" \
+		--notes "Release $(RELEASE_VERSION) of Sidekick - Extensible Development Workflow Tool" \
+		$(DIST_DIR)/$(RELEASE_TAR) \
+		$(DIST_DIR)/$(RELEASE_TAR).sha256 \
+		install.sh
+	
+	@echo "GitHub release created successfully!"
+	@echo "Users can now install with:"
+	@echo "  curl -sSL https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/releases/download/$(RELEASE_VERSION)/install.sh | bash"
 
-# Spec workflow helpers
-spec-status:
-	@echo "Checking spec status..."
-	@find docs/specs -name "tasks.md" -exec sh -c 'echo "=== {} ==="; grep -E "^- \[[ x]\]" {} | wc -l | xargs -I {} sh -c "echo \"Completed: \$(grep -E \"^- \[x\]\" {} | wc -l) / \$(grep -E \"^- \[[ x]\]\" {} | wc -l)\""' \;
+release: test release-github ## Run tests and create GitHub release
+	@echo "Release $(RELEASE_VERSION) completed!"
+
+tag: ## Create git tag for release
+	@echo "Creating git tag $(RELEASE_VERSION)..."
+	@git tag -a $(RELEASE_VERSION) -m "Release $(RELEASE_VERSION)"
+	@echo "Tag created. Push with: git push origin $(RELEASE_VERSION)"
+
+bump-patch: ## Bump patch version (e.g., v1.0.0 -> v1.0.1)
+	@current=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	new=$$(echo $$current | awk -F. '{print $$1"."$$2"."$$3+1}'); \
+	echo "Bumping version from $$current to $$new"; \
+	git tag -a $$new -m "Release $$new"
+
+bump-minor: ## Bump minor version (e.g., v1.0.0 -> v1.1.0)
+	@current=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	new=$$(echo $$current | awk -F. '{print $$1"."$$2+1".0"}'); \
+	echo "Bumping version from $$current to $$new"; \
+	git tag -a $$new -m "Release $$new"
+
+bump-major: ## Bump major version (e.g., v1.0.0 -> v2.0.0)
+	@current=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	new=$$(echo $$current | awk -F. '{v=substr($$1,2); print "v"v+1".0.0"}'); \
+	echo "Bumping version from $$current to $$new"; \
+	git tag -a $$new -m "Release $$new"
+
+.DEFAULT_GOAL := help

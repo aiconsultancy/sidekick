@@ -4,9 +4,9 @@
 
 ### Setup & Infrastructure (Size: S)
 - [x] Create spec module structure
-- [ ] Create plugin file: `plugins/sidekick-dedupe-issues`
-- [ ] Set up basic command structure with help text
-- [ ] Add argument parsing for options
+- [x] Create plugin file: `plugins/sidekick-dedupe-issues`
+- [x] Set up basic command structure with help text
+- [x] Add argument parsing for options
 
 ### Core Functionality (Size: L)
 - [ ] Implement issue fetcher using gh CLI

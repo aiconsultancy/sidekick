@@ -1,0 +1,199 @@
+#!/bin/bash
+
+# GitHub Issue Deduplicator Plugin
+# Identifies and removes duplicate GitHub issues, keeping only the newest
+
+set -e
+
+# Source shared libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/config.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/output_helpers.sh" 2>/dev/null || true
+
+# Default values
+THRESHOLD=85
+DRY_RUN=true
+CONFIRM=false
+LIMIT=1000
+VERBOSE=false
+ORG=""
+REPO=""
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Usage function
+usage() {
+    cat << EOF
+Usage: sidekick dedupe-issues [OPTIONS] [org] [repo]
+
+Identify and remove duplicate GitHub issues, keeping only the newest.
+
+OPTIONS:
+    -t, --threshold NUM    Similarity threshold (0-100, default: 85)
+    -n, --dry-run         Preview without making changes (default)
+    -c, --confirm         Execute the deduplication (removes dry-run)
+    -l, --limit NUM       Maximum issues to process (default: 1000)
+    -v, --verbose         Show detailed processing information
+    -h, --help           Show this help message
+
+ARGUMENTS:
+    org     GitHub organization (uses SIDEKICK_GITHUB_ORG if not provided)
+    repo    GitHub repository (uses SIDEKICK_GITHUB_REPO if not provided)
+
+EXAMPLES:
+    # Preview duplicates (dry-run mode)
+    sidekick dedupe-issues myorg myrepo
+    
+    # Actually close duplicate issues
+    sidekick dedupe-issues --confirm myorg myrepo
+    
+    # Use stricter similarity threshold
+    sidekick dedupe-issues --threshold 90 myorg myrepo
+    
+    # Process limited number of issues
+    sidekick dedupe-issues --limit 100 myorg myrepo
+
+ENVIRONMENT:
+    SIDEKICK_GITHUB_ORG     Default GitHub organization
+    SIDEKICK_GITHUB_REPO    Default GitHub repository
+
+SAFETY:
+    This plugin runs in dry-run mode by default to prevent accidental
+    issue closure. Use --confirm to actually close duplicate issues.
+    
+    Duplicates are determined by title similarity. The newest issue
+    in each duplicate group is kept, older ones are closed with a
+    reference comment.
+
+EOF
+}
+
+# Parse command line arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -t|--threshold)
+                THRESHOLD="$2"
+                # Validate threshold
+                if [[ ! "$THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$THRESHOLD" -lt 0 ]] || [[ "$THRESHOLD" -gt 100 ]]; then
+                    echo "Error: Invalid threshold. Must be between 0 and 100." >&2
+                    exit 1
+                fi
+                shift 2
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                CONFIRM=false
+                shift
+                ;;
+            -c|--confirm)
+                CONFIRM=true
+                DRY_RUN=false
+                shift
+                ;;
+            -l|--limit)
+                LIMIT="$2"
+                if [[ ! "$LIMIT" =~ ^[0-9]+$ ]] || [[ "$LIMIT" -lt 1 ]]; then
+                    echo "Error: Invalid limit. Must be a positive number." >&2
+                    exit 1
+                fi
+                shift 2
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            -*)
+                echo "Error: Unknown option: $1" >&2
+                usage
+                exit 1
+                ;;
+            *)
+                # Positional arguments
+                if [[ -z "$ORG" ]]; then
+                    ORG="$1"
+                elif [[ -z "$REPO" ]]; then
+                    REPO="$1"
+                else
+                    echo "Error: Too many arguments" >&2
+                    usage
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+}
+
+# Main function
+main() {
+    # Parse arguments
+    parse_arguments "$@"
+    
+    # Load environment defaults if available
+    load_sidekick_config silent 2>/dev/null || true
+    
+    # Use environment defaults if not provided
+    ORG="${ORG:-$(get_github_org_or_user 2>/dev/null || echo '')}"
+    REPO="${REPO:-$DEFAULT_GITHUB_REPO}"
+    
+    # Validate required arguments
+    if [[ -z "$ORG" ]] || [[ -z "$REPO" ]]; then
+        echo "Error: Missing required arguments: organization and repository" >&2
+        echo "Provide them as arguments or set SIDEKICK_GITHUB_ORG and SIDEKICK_GITHUB_REPO" >&2
+        exit 1
+    fi
+    
+    # Show configuration
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo "Verbose mode enabled" >&2
+        echo "Configuration:" >&2
+        echo "  Organization: $ORG" >&2
+        echo "  Repository: $REPO" >&2
+        echo "  Threshold: $THRESHOLD%" >&2
+        echo "  Limit: $LIMIT issues" >&2
+        echo "  Mode: $(if [[ "$DRY_RUN" == "true" ]]; then echo "DRY RUN"; else echo "CONFIRM"; fi)" >&2
+        echo "" >&2
+    fi
+    
+    # Display mode banner
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "${BOLD}${YELLOW}=== DRY RUN MODE ===${NC}"
+        echo "No issues will be closed. Use --confirm to execute changes."
+        echo ""
+    else
+        echo -e "${BOLD}${RED}=== CONFIRM MODE ===${NC}"
+        echo "Issues WILL be closed. Press Ctrl+C to cancel."
+        echo ""
+        sleep 3
+    fi
+    
+    # Show limit in output
+    echo "Processing up to limit: $LIMIT issues from $ORG/$REPO"
+    echo "Using similarity threshold: $THRESHOLD%"
+    echo "Mode: $(if [[ "$DRY_RUN" == "true" ]]; then echo "DRY RUN"; else echo "CONFIRM"; fi)"
+    echo ""
+    
+    # Placeholder for actual implementation
+    echo "Issue deduplication will be implemented in next tasks..."
+    
+    # For now, just show we're working
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo "Would fetch issues with: gh issue list --repo \"$ORG/$REPO\" --limit $LIMIT -s open --json number,title,createdAt,author,url" >&2
+    fi
+}
+
+# Run main function
+main "$@"
