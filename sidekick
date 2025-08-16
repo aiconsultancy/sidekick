@@ -5,8 +5,21 @@
 
 set -e
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Script directory - handle both installed and development scenarios
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+
+# If we're running from an installed location, adjust paths
+if [[ "$SCRIPT_DIR" == */bin ]]; then
+    # Running from installed location (e.g., ~/.local/bin or /usr/local/bin)
+    INSTALL_BASE="$(dirname "$SCRIPT_DIR")"
+    PLUGINS_DIR="$INSTALL_BASE/share/sidekick/plugins"
+    LIB_DIR="$INSTALL_BASE/share/sidekick/lib"
+else
+    # Running from development directory
+    PLUGINS_DIR="$SCRIPT_DIR/plugins"
+    LIB_DIR="$SCRIPT_DIR/lib"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -50,7 +63,7 @@ print_color() {
 # Function to find available commands
 find_commands() {
     # Include plugins folder in search paths
-    local search_paths=("$SCRIPT_DIR" "$SCRIPT_DIR/plugins" "$HOME/.local/bin" "/usr/local/bin")
+    local search_paths=("$PLUGINS_DIR" "$SCRIPT_DIR" "$HOME/.local/bin" "/usr/local/bin")
     local commands=()
     
     for path in "${search_paths[@]}"; do
@@ -125,7 +138,7 @@ execute_command() {
     shift 2 || true
     
     # Search paths - include plugins folder
-    local search_paths=("$SCRIPT_DIR" "$SCRIPT_DIR/plugins" "$HOME/.local/bin" "/usr/local/bin")
+    local search_paths=("$PLUGINS_DIR" "$SCRIPT_DIR" "$HOME/.local/bin" "/usr/local/bin")
     
     # First, try verb-noun combination if noun is provided and not a flag
     if [[ -n "$noun" ]] && [[ ! "$noun" =~ ^- ]]; then
