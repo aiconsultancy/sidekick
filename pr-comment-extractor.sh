@@ -28,6 +28,7 @@ OUTPUT_FORMAT="json"
 OUTPUT_FILE=""
 VERBOSE=false
 JSON_ONLY=false
+SHOW_CLOSED=false
 ERRORS_LIST="[]"
 
 # Progress indicators
@@ -58,6 +59,8 @@ OPTIONS:
     -o, --output FILE      Write output to file instead of stdout
     -j, --json-only        Output JSON only, no decorative text
     -v, --verbose          Enable verbose logging
+    -s, --show-closed      Fetch comments for closed PRs (default: skip)
+    --schema               Output the JSON schema and exit
     -h, --help             Show this help message
 
 EXAMPLES:
@@ -99,6 +102,20 @@ parse_arguments() {
             -v|--verbose)
                 VERBOSE=true
                 shift
+                ;;
+            -s|--show-closed)
+                SHOW_CLOSED=true
+                shift
+                ;;
+            --schema)
+                # Output the JSON schema and exit
+                schema_file="$SCRIPT_DIR/schema/pr-comments-output.schema.json"
+                if [[ -f "$schema_file" ]]; then
+                    cat "$schema_file"
+                else
+                    echo '{"error": "Schema file not found at '$schema_file'"}'
+                fi
+                exit 0
                 ;;
             -h|--help)
                 usage
@@ -301,6 +318,103 @@ main() {
     output_success "PR validated: #$PR_NUMBER - $PR_TITLE"
     output_verbose "PR state: $PR_STATE, author: $PR_AUTHOR"
     output_newline
+    
+    # Check if PR is closed and if we should skip fetching comments
+    if [[ "$PR_STATE" == "closed" ]] && [[ "$SHOW_CLOSED" != "true" ]]; then
+        output_warning "PR is closed - skipping comment fetching (use --show-closed to fetch anyway)"
+        output_newline
+        
+        # Create minimal response for closed PR
+        pr_metadata=$(jq -n \
+            --arg org "$PR_ORG" \
+            --arg repo "$PR_REPO" \
+            --arg number "$PR_NUMBER" \
+            --arg url "$PR_URL" \
+            --arg title "$PR_TITLE" \
+            --arg body "$PR_BODY" \
+            --arg state "$PR_STATE" \
+            --arg author "$PR_AUTHOR" \
+            --arg created "$PR_CREATED" \
+            --arg updated "$PR_UPDATED" \
+            --arg draft "$PR_DRAFT" \
+            --arg mergeable "$PR_MERGEABLE" \
+            --arg merged "$PR_MERGED" \
+            --arg base_branch "$PR_BASE_BRANCH" \
+            --arg head_branch "$PR_HEAD_BRANCH" \
+            --arg head_sha "$PR_HEAD_SHA" \
+            '{
+                organization: $org,
+                repository: $repo,
+                pr_number: ($number | tonumber),
+                url: $url,
+                title: $title,
+                description: $body,
+                state: $state,
+                author: $author,
+                created_at: $created,
+                updated_at: $updated,
+                draft: ($draft | test("true")),
+                mergeable: (if $mergeable == "null" then null else ($mergeable | test("true")) end),
+                merged: ($merged | test("true")),
+                base_branch: $base_branch,
+                head_branch: $head_branch,
+                head_sha: $head_sha,
+                checks: {},
+                valid: true,
+                skipped_comments: true,
+                skip_reason: "PR is closed"
+            }')
+        
+        # Create minimal output
+        minimal_output=$(jq -n \
+            --argjson pr_info "$pr_metadata" \
+            --argjson errors "$ERRORS_LIST" \
+            '{
+                pr_info: $pr_info,
+                pr_comments: [],
+                metadata: {
+                    statistics: {
+                        total_comments: 0,
+                        issue_comments: 0,
+                        review_comments: 0,
+                        reviews: 0,
+                        duplicate_count: 0,
+                        skipped: true
+                    },
+                    duplicate_groups: {},
+                    extraction_timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
+                },
+                errors: $errors
+            }')
+        
+        # Output the minimal response
+        if [[ "$OUTPUT_FORMAT" == "yaml" ]]; then
+            # Convert to YAML if needed
+            if command -v yq >/dev/null 2>&1; then
+                output=$(echo "$minimal_output" | yq eval -P -)
+            elif command -v python3 >/dev/null 2>&1; then
+                output=$(echo "$minimal_output" | python3 -c "import sys, json, yaml; yaml.dump(json.load(sys.stdin), sys.stdout, default_flow_style=False)")
+            else
+                output="$minimal_output"
+            fi
+        else
+            output="$minimal_output"
+        fi
+        
+        output_result "$output" "$OUTPUT_FILE"
+        
+        # Show summary if not in JSON-only mode
+        if [[ "$JSON_ONLY" != "true" ]]; then
+            output_section "Summary"
+            output_info "PR" "#$PR_NUMBER - $PR_TITLE"
+            output_info "State" "CLOSED (merged: $PR_MERGED)"
+            output_info "Comments" "Skipped (use --show-closed to fetch)"
+            output_newline
+            output_success "${BOLD}${GREEN}PR information extracted (comments skipped for closed PR)${NC}"
+        fi
+        
+        exit 0
+    fi
     
     # Fetch PR data
     output_step "4/7" "Fetching PR comments"

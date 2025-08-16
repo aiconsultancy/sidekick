@@ -1,0 +1,286 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PR Comments Extractor Output Schema",
+  "description": "Schema for the output of the PR comment extraction tool",
+  "type": "object",
+  "required": ["pr_info", "pr_comments", "metadata", "errors"],
+  "properties": {
+    "pr_info": {
+      "type": "object",
+      "description": "Pull Request metadata and information",
+      "required": ["organization", "repository", "pr_number", "url", "valid"],
+      "properties": {
+        "organization": {
+          "type": "string",
+          "description": "GitHub organization or user name"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository name"
+        },
+        "pr_number": {
+          "type": "integer",
+          "description": "Pull request number"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Full URL to the pull request"
+        },
+        "title": {
+          "type": "string",
+          "description": "Pull request title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Pull request description/body"
+        },
+        "state": {
+          "type": "string",
+          "enum": ["open", "closed"],
+          "description": "Current state of the pull request"
+        },
+        "author": {
+          "type": "string",
+          "description": "GitHub username of the PR author"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when PR was created"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when PR was last updated"
+        },
+        "draft": {
+          "type": "boolean",
+          "description": "Whether the PR is a draft"
+        },
+        "mergeable": {
+          "type": ["boolean", "null"],
+          "description": "Whether the PR can be merged (null if unknown)"
+        },
+        "merged": {
+          "type": "boolean",
+          "description": "Whether the PR has been merged"
+        },
+        "base_branch": {
+          "type": "string",
+          "description": "Target branch for the PR"
+        },
+        "head_branch": {
+          "type": "string",
+          "description": "Source branch for the PR"
+        },
+        "head_sha": {
+          "type": "string",
+          "description": "SHA of the head commit"
+        },
+        "checks": {
+          "type": "object",
+          "description": "CI/Check status information",
+          "properties": {
+            "total": {
+              "type": "integer",
+              "description": "Total number of checks"
+            },
+            "passed": {
+              "type": "integer",
+              "description": "Number of passed checks"
+            },
+            "failed": {
+              "type": "integer",
+              "description": "Number of failed checks"
+            },
+            "pending": {
+              "type": "integer",
+              "description": "Number of pending checks"
+            },
+            "runs": {
+              "type": "array",
+              "description": "Individual check run details",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Check name"
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "Check status"
+                  },
+                  "conclusion": {
+                    "type": ["string", "null"],
+                    "description": "Check conclusion"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "Whether the PR was successfully validated"
+        },
+        "skipped_comments": {
+          "type": "boolean",
+          "description": "Whether comment fetching was skipped (e.g., for closed PRs)"
+        },
+        "skip_reason": {
+          "type": "string",
+          "description": "Reason for skipping comment fetching"
+        }
+      }
+    },
+    "pr_comments": {
+      "type": "array",
+      "description": "Array of all PR comments (issue comments, review comments, and reviews)",
+      "items": {
+        "type": "object",
+        "required": ["comment_id", "author", "body", "created_at", "type"],
+        "properties": {
+          "comment_id": {
+            "type": "string",
+            "description": "Unique identifier for the comment"
+          },
+          "author": {
+            "type": "string",
+            "description": "GitHub username of the comment author"
+          },
+          "body": {
+            "type": "string",
+            "description": "Comment text content"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp when comment was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp when comment was last updated"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Direct URL to the comment"
+          },
+          "reactions": {
+            "type": "object",
+            "description": "Reaction counts for the comment",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "resolved", "ignored"],
+            "description": "Comment status based on keywords"
+          },
+          "duplicate_group": {
+            "type": ["string", "null"],
+            "description": "Duplicate group identifier if part of a duplicate set"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["issue_comment", "review_comment", "review"],
+            "description": "Type of comment"
+          },
+          "path": {
+            "type": "string",
+            "description": "File path (for review comments)"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line number (for review comments)"
+          },
+          "review_state": {
+            "type": "string",
+            "enum": ["PENDING", "COMMENTED", "APPROVED", "CHANGES_REQUESTED", "DISMISSED"],
+            "description": "Review state (for reviews)"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extraction metadata and statistics",
+      "required": ["statistics", "duplicate_groups", "extraction_timestamp"],
+      "properties": {
+        "statistics": {
+          "type": "object",
+          "description": "Comment count statistics",
+          "required": ["total_comments"],
+          "properties": {
+            "total_comments": {
+              "type": "integer",
+              "description": "Total number of comments"
+            },
+            "issue_comments": {
+              "type": "integer",
+              "description": "Number of issue comments"
+            },
+            "review_comments": {
+              "type": "integer",
+              "description": "Number of review comments"
+            },
+            "reviews": {
+              "type": "integer",
+              "description": "Number of reviews"
+            },
+            "duplicate_count": {
+              "type": "integer",
+              "description": "Number of comments identified as duplicates"
+            },
+            "skipped": {
+              "type": "boolean",
+              "description": "Whether comment extraction was skipped"
+            }
+          }
+        },
+        "duplicate_groups": {
+          "type": "object",
+          "description": "Groups of duplicate comment IDs",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "extraction_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when extraction was performed"
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Array of errors encountered during extraction",
+      "items": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "code": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional error context",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

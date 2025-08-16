@@ -39,6 +39,8 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 - YAML output for human readability
 - File output with summary display
 - Comprehensive error tracking and reporting
+- JSON schema output for validation
+- Minimal output for closed PRs (performance optimization)
 
 ## Installation
 
@@ -114,6 +116,12 @@ Or using separate arguments:
 # Enable verbose output for debugging
 ./pr-comment-extractor.sh -v https://github.com/org/repo/pull/123
 
+# Fetch comments for closed PRs (by default, closed PRs return minimal info)
+./pr-comment-extractor.sh -s https://github.com/org/repo/pull/123
+
+# Get the JSON schema for the output format
+./pr-comment-extractor.sh --schema
+
 # Combine multiple options
 ./pr-comment-extractor.sh -v -j -o output.json org repo 456
 ```
@@ -126,9 +134,16 @@ Or using separate arguments:
 | `-o, --output FILE` | Write output to file instead of stdout |
 | `-j, --json-only` | Output clean JSON only, no decorative text |
 | `-v, --verbose` | Enable verbose output for debugging |
+| `-s, --show-closed` | Fetch comments for closed PRs (default: skip for better performance) |
+| `--schema` | Output the JSON schema for the output format and exit |
 | `-h, --help` | Show help message |
 
 ## Output Structure
+
+The tool outputs structured JSON (or YAML) data. A complete JSON schema is available by running:
+```bash
+./pr-comment-extractor.sh --schema
+```
 
 ### JSON Format
 
