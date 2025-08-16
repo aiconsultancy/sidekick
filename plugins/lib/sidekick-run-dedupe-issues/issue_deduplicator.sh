@@ -71,22 +71,15 @@ fetch_all_issues() {
     return 1
 }
 
-# Normalize title for comparison
+# Normalize title for comparison - simplified version
 normalize_title() {
     local title="$1"
     
     # Convert to lowercase
     title=$(echo "$title" | tr '[:upper:]' '[:lower:]')
     
-    # Remove special characters except spaces
-    title=$(echo "$title" | sed 's/[^a-z0-9 ]//g')
-    
-    # Remove common stop words efficiently using a single sed command
-    # Use space boundaries to ensure we only match whole words
-    title=$(echo " $title " | sed -E 's/ (the|a|an|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|could|should|may|might|must|can|shall|to|of|in|for|on|at|with|by|from|about|into|through|during|before|after|above|below|between|under|over|not) / /g')
-    
-    # Remove extra spaces and trim
-    title=$(echo "$title" | tr -s ' ' | sed 's/^ *//;s/ *$//')
+    # Remove special characters and extra spaces
+    title=$(echo "$title" | sed 's/[^a-z0-9 ]//g' | tr -s ' ' | sed 's/^ *//;s/ *$//')
     
     echo "$title"
 }
@@ -220,7 +213,7 @@ calculate_token_overlap() {
     fi
 }
 
-# Calculate weighted similarity score
+# Calculate similarity score - simplified for exact matching
 similarity_score() {
     local title1="$1"
     local title2="$2"
@@ -229,22 +222,15 @@ similarity_score() {
     local norm1=$(normalize_title "$title1")
     local norm2=$(normalize_title "$title2")
     
-    # If normalized titles are identical
+    # If normalized titles are identical, they're duplicates
     if [[ "$norm1" == "$norm2" ]]; then
         echo "100"
         return
     fi
     
-    # Calculate Levenshtein similarity (70% weight)
+    # Otherwise, check if they're very similar (90%+ character match)
     local lev_score=$(calculate_levenshtein "$norm1" "$norm2")
-    
-    # Calculate token overlap (30% weight)
-    local token_score=$(calculate_token_overlap "$norm1" "$norm2")
-    
-    # Weighted average
-    local final_score=$(( (lev_score * 70 + token_score * 30) / 100 ))
-    
-    echo "$final_score"
+    echo "$lev_score"
 }
 
 # Show progress spinner

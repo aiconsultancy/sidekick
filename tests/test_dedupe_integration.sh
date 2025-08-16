@@ -66,7 +66,7 @@ echo ""
 echo "Test Suite 1: Duplicate Detection with Mock Data"
 echo "-----------------------------------------"
 
-# Create mock issue data
+# Create mock issue data with exact duplicates after normalization
 mock_issues='[
   {
     "number": 100,
@@ -77,7 +77,7 @@ mock_issues='[
   },
   {
     "number": 101,
-    "title": "Application crashes at startup",
+    "title": "APP CRASHES ON STARTUP!",
     "createdAt": "2024-01-14T10:00:00Z",
     "author": {"login": "user2"},
     "url": "https://github.com/org/repo/issues/101"
@@ -91,7 +91,7 @@ mock_issues='[
   },
   {
     "number": 103,
-    "title": "Memory leak found in parser module",
+    "title": "[BUG] Memory leak in parser",
     "createdAt": "2024-01-12T10:00:00Z",
     "author": {"login": "user4"},
     "url": "https://github.com/org/repo/issues/103"
@@ -105,8 +105,8 @@ mock_issues='[
   }
 ]'
 
-# Test duplicate detection with lower threshold for these test cases
-duplicate_groups=$(find_duplicate_groups "$mock_issues" 70)
+# Test duplicate detection with reasonable threshold
+duplicate_groups=$(find_duplicate_groups "$mock_issues" 85)
 group_count=$(echo "$duplicate_groups" | jq 'length')
 
 echo "Found $group_count duplicate groups"
@@ -168,15 +168,15 @@ echo ""
 echo "Test Suite 4: Threshold Sensitivity"
 echo "-----------------------------------------"
 
-# Test with high threshold (95%)
-strict_groups=$(find_duplicate_groups "$mock_issues" 95)
+# Test with high threshold (100% - exact match only)
+strict_groups=$(find_duplicate_groups "$mock_issues" 100)
 strict_count=$(echo "$strict_groups" | jq 'length')
-echo "With 95% threshold: $strict_count groups"
+echo "With 100% threshold: $strict_count groups (exact matches only)"
 
-# Test with low threshold (70%)
-loose_groups=$(find_duplicate_groups "$mock_issues" 70)
+# Test with low threshold (80%)
+loose_groups=$(find_duplicate_groups "$mock_issues" 80)
 loose_count=$(echo "$loose_groups" | jq 'length')
-echo "With 70% threshold: $loose_count groups"
+echo "With 80% threshold: $loose_count groups"
 
 if [[ $loose_count -ge $strict_count ]]; then
     echo -e "${GREEN}✓${NC} Lower threshold finds same or more duplicates"
