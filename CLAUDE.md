@@ -15,13 +15,24 @@ sidekick
 
 ### Project Structure
 ```
-src/
-├── [main source directories]
-tests/
-├── [test directories]
+sidekick            # Main dispatcher script
+lib/                # Shared libraries
+├── config.sh       # Configuration management
+└── output_helpers.sh # Output formatting utilities
+plugins/            # Plugin executables
+├── sidekick-*      # Plugin executable scripts
+└── lib/            # Plugin-specific libraries
+    └── sidekick-*/ # Folder matching plugin name
+        └── *.sh    # Library files for that plugin
+tests/              # Test suites
 docs/
 └── specs/          # Spec-driven development documentation
 ```
+
+### Plugin Conventions
+- Plugin executables go in `plugins/` directory with name `sidekick-<command>`
+- Plugin-specific libraries go in `plugins/lib/sidekick-<command>/`
+- This keeps plugin code organized and prevents naming conflicts
 
 ## Essential Commands
 

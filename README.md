@@ -26,6 +26,15 @@
 - Outputs structured JSON/YAML for LLM processing
 - Skips closed PRs by default (use `--show-closed` to override)
 
+### `sidekick run dedupe-issues`
+**GitHub Issue Deduplicator**
+- Identifies duplicate GitHub issues using semantic similarity
+- Keeps only the newest issue in each duplicate group
+- Safe by default with dry-run mode
+- Configurable similarity threshold (0-100%)
+- Adds comments and labels before closing duplicates
+- Built-in rate limiting and retry logic
+
 ### `sidekick list-prs`
 **List GitHub Pull Requests**
 - Lists PRs from any GitHub repository
@@ -55,8 +64,15 @@ export SIDEKICK_GITHUB_REPO=myrepo
 # Now you only need the PR number
 ./sidekick get pr-comments 456
 
+# Preview duplicate issues (dry-run)
+./sidekick run dedupe-issues myorg myrepo
+
+# Actually close duplicate issues
+./sidekick run dedupe-issues --confirm myorg myrepo
+
 # Get help for a specific command
 ./sidekick get pr-comments --help
+./sidekick run dedupe-issues --help
 ```
 
 ## Installation
@@ -121,6 +137,34 @@ Or using separate arguments:
 ```bash
 ./sidekick get pr-comments org repo 123
 ```
+
+### Issue Deduplication
+
+Find and remove duplicate GitHub issues:
+
+```bash
+# Preview duplicates (dry-run mode - default)
+./sidekick run dedupe-issues myorg myrepo
+
+# Actually close duplicate issues
+./sidekick run dedupe-issues --confirm myorg myrepo
+
+# Use a stricter threshold (90% similarity)
+./sidekick run dedupe-issues --threshold 90 myorg myrepo
+
+# Process only first 100 issues
+./sidekick run dedupe-issues --limit 100 myorg myrepo
+
+# Enable verbose output
+./sidekick run dedupe-issues -v myorg myrepo
+```
+
+**Safety Features:**
+- Runs in dry-run mode by default (no issues closed)
+- Requires `--confirm` flag to actually close issues
+- Adds explanatory comments before closing
+- Keeps the newest issue in each duplicate group
+- Includes retry logic and rate limit handling
 
 ### Advanced Options
 
@@ -271,8 +315,12 @@ code-review/
 ├── sidekick                    # Main entry point (kubectl-like dispatcher)
 ├── plugins/                    # Plugin directory (auto-discovered)
 │   ├── sidekick-get-pr-comments  # PR comment extraction
+│   ├── sidekick-run-dedupe-issues # GitHub issue deduplicator
 │   ├── sidekick-list-prs         # List GitHub PRs
-│   └── sidekick-hello            # Example plugin
+│   ├── sidekick-hello            # Example plugin
+│   └── lib/                      # Plugin-specific libraries
+│       └── sidekick-run-dedupe-issues/
+│           └── issue_deduplicator.sh  # Deduplication logic
 ├── lib/                        # Shared libraries
 │   ├── config.sh              # Environment configuration management
 │   ├── url_parser.sh          # URL parsing logic
