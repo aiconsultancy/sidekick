@@ -17,9 +17,9 @@ for test_file in tests/test_*.sh; do
     if [[ -f "$test_file" ]]; then
         echo -e "\n${BOLD}Running: $(basename $test_file)${NC}"
         if bash "$test_file"; then
-            ((TESTS_PASSED++))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
         else
-            ((TESTS_FAILED++))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
             echo -e "${RED}✗ Test failed: $(basename $test_file)${NC}"
         fi
     fi
