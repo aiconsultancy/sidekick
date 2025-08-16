@@ -293,12 +293,18 @@ main() {
                     pr_info: {
                         organization: $org,
                         repository: $repo,
-                        pr_number: $number,
+                        pr_number: ($number | tonumber),
                         url: $url,
                         valid: false
                     },
                     pr_comments: [],
-                    metadata: {},
+                    metadata: {
+                        statistics: {
+                            total_comments: 0
+                        },
+                        duplicate_groups: {},
+                        extraction_timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
+                    },
                     errors: $errors
                 }')
             echo "$error_output"
@@ -329,12 +335,18 @@ main() {
                     pr_info: {
                         organization: $org,
                         repository: $repo,
-                        pr_number: $number,
+                        pr_number: ($number | tonumber),
                         url: $url,
                         valid: false
                     },
                     pr_comments: [],
-                    metadata: {},
+                    metadata: {
+                        statistics: {
+                            total_comments: 0
+                        },
+                        duplicate_groups: {},
+                        extraction_timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
+                    },
                     errors: $errors
                 }')
             echo "$error_output"

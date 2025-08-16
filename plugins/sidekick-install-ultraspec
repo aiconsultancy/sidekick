@@ -1,0 +1,492 @@
+#!/bin/bash
+
+# Ultraspec Installer Plugin for Sidekick
+# Installs ultraspec spec-driven development framework into Claude Code projects
+# https://github.com/aiconsultancy/ultraspec
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Default values
+FORCE=false
+VERBOSE=false
+DRY_RUN=false
+SKIP_CONFIRMATION=false
+INSTALL_DIR="."
+ULTRASPEC_VERSION="main"
+
+# Usage function
+usage() {
+    cat << EOF
+Usage: sidekick install ultraspec [OPTIONS] [directory]
+
+Install ultraspec spec-driven development framework into a Claude Code project.
+
+OPTIONS:
+    -f, --force           Force installation even if ultraspec is already installed
+    -v, --verbose         Show detailed installation progress
+    -n, --dry-run         Show what would be installed without making changes
+    -y, --yes             Skip confirmation prompts
+    --version VERSION     Install specific version/branch (default: main)
+    -h, --help            Show this help message
+
+ARGUMENTS:
+    directory             Directory to install ultraspec in (default: current directory)
+
+EXAMPLES:
+    # Install ultraspec in current directory
+    sidekick install ultraspec
+    
+    # Install in specific directory
+    sidekick install ultraspec /path/to/project
+    
+    # Force reinstall
+    sidekick install ultraspec --force
+    
+    # Dry run to see what would be installed
+    sidekick install ultraspec --dry-run
+
+DESCRIPTION:
+    This plugin installs the ultraspec framework which provides:
+    - Spec-driven development workflow for Claude Code
+    - Slash commands for creating and managing specifications
+    - Test-driven development integration
+    - Automated task breakdown and implementation
+    
+    For more information, visit: https://github.com/aiconsultancy/ultraspec
+
+EOF
+}
+
+# Helper functions
+print_error() {
+    echo -e "${RED}✗ $1${NC}" >&2
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}→ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_verbose() {
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "${CYAN}[DEBUG]${NC} $1" >&2
+    fi
+}
+
+# Check if ultraspec is already installed
+check_existing_installation() {
+    local dir="${1:-.}"
+    
+    # Check for CLAUDE.md with ultraspec content
+    if [[ -f "$dir/CLAUDE.md" ]] && grep -q "/spec-" "$dir/CLAUDE.md" 2>/dev/null; then
+        return 0  # Already installed
+    fi
+    
+    # Check for docs/specs directory
+    if [[ -d "$dir/docs/specs" ]]; then
+        return 0  # Likely installed
+    fi
+    
+    return 1  # Not installed
+}
+
+# Parse command line arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -f|--force)
+                FORCE=true
+                shift
+                ;;
+            -v|--verbose)
+                VERBOSE=true
+                shift
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            -y|--yes)
+                SKIP_CONFIRMATION=true
+                shift
+                ;;
+            --version)
+                ULTRASPEC_VERSION="$2"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+            *)
+                # Positional argument - installation directory
+                INSTALL_DIR="$1"
+                shift
+                ;;
+        esac
+    done
+}
+
+# Validate installation directory
+validate_directory() {
+    local dir="$1"
+    
+    # Check if directory exists
+    if [[ ! -d "$dir" ]]; then
+        print_error "Directory does not exist: $dir"
+        return 1
+    fi
+    
+    # Check if it's a git repository (recommended but not required)
+    if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+        print_warning "Directory is not a git repository: $dir"
+        print_info "Ultraspec works best in git repositories"
+    fi
+    
+    # Check write permissions
+    if [[ ! -w "$dir" ]]; then
+        print_error "No write permission for directory: $dir"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Install ultraspec files
+install_ultraspec() {
+    local dir="$1"
+    local temp_dir="/tmp/ultraspec_$$"
+    
+    print_info "Downloading ultraspec from GitHub..."
+    print_verbose "Repository: https://github.com/aiconsultancy/ultraspec"
+    print_verbose "Branch/Version: $ULTRASPEC_VERSION"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_info "[DRY RUN] Would download ultraspec and install to: $dir"
+        print_info "[DRY RUN] Files to be created/modified:"
+        echo "  - CLAUDE.md"
+        echo "  - docs/specs/"
+        echo "  - Makefile (or Makefile modifications)"
+        return 0
+    fi
+    
+    # Clone the repository
+    if ! git clone --quiet --branch "$ULTRASPEC_VERSION" --depth 1 \
+        "https://github.com/aiconsultancy/ultraspec.git" "$temp_dir" 2>/dev/null; then
+        print_error "Failed to download ultraspec"
+        print_info "Check your internet connection and the version/branch name"
+        return 1
+    fi
+    
+    print_verbose "Downloaded to temporary directory: $temp_dir"
+    
+    # Detect project name and stack
+    local project_name=""
+    if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+        # Try to get name from git remote
+        local remote_url=$(git -C "$dir" remote get-url origin 2>/dev/null || echo "")
+        if [[ -n "$remote_url" ]]; then
+            project_name=$(basename "$remote_url" .git)
+        fi
+    fi
+    
+    # Fallback to directory name
+    if [[ -z "$project_name" ]]; then
+        project_name=$(basename "$(cd "$dir" && pwd)")
+    fi
+    
+    # Detect stack from existing files
+    local stack="generic"
+    if [[ -f "$dir/package.json" ]]; then
+        if [[ -f "$dir/pnpm-lock.yaml" ]]; then
+            stack="node-pnpm"
+        elif [[ -f "$dir/yarn.lock" ]]; then
+            stack="node-yarn"
+        else
+            stack="node-npm"
+        fi
+    elif [[ -f "$dir/requirements.txt" ]] || [[ -f "$dir/pyproject.toml" ]]; then
+        stack="python"
+    elif [[ -f "$dir/go.mod" ]]; then
+        stack="golang"
+    elif [[ -f "$dir/Cargo.toml" ]]; then
+        stack="rust"
+    elif [[ -f "$dir/*.csproj" ]] || [[ -f "$dir/*.sln" ]]; then
+        stack="dotnet"
+    fi
+    
+    print_info "Project: $project_name"
+    print_info "Detected stack: $stack"
+    
+    # Copy CLAUDE.md
+    print_info "Installing CLAUDE.md..."
+    if [[ -f "$dir/CLAUDE.md" ]]; then
+        # Backup existing CLAUDE.md
+        cp "$dir/CLAUDE.md" "$dir/CLAUDE.md.backup.$(date +%Y%m%d_%H%M%S)"
+        print_verbose "Backed up existing CLAUDE.md"
+        
+        # Merge with existing CLAUDE.md
+        echo "" >> "$dir/CLAUDE.md"
+        echo "# ========================================" >> "$dir/CLAUDE.md"
+        echo "# ULTRASPEC - Spec-Driven Development" >> "$dir/CLAUDE.md"
+        echo "# ========================================" >> "$dir/CLAUDE.md"
+        echo "" >> "$dir/CLAUDE.md"
+        cat "$temp_dir/CLAUDE.md" >> "$dir/CLAUDE.md"
+    else
+        cp "$temp_dir/CLAUDE.md" "$dir/CLAUDE.md"
+    fi
+    
+    # Replace project name in CLAUDE.md
+    sed -i.bak "s/\[PROJECT_NAME\]/$project_name/g" "$dir/CLAUDE.md" 2>/dev/null || \
+        sed -i '' "s/\[PROJECT_NAME\]/$project_name/g" "$dir/CLAUDE.md" 2>/dev/null || true
+    rm -f "$dir/CLAUDE.md.bak"
+    
+    # Create docs/specs directory structure
+    print_info "Creating specification directory structure..."
+    mkdir -p "$dir/docs/specs"
+    
+    # Copy example spec if it doesn't exist
+    if [[ ! -d "$dir/docs/specs/example" ]]; then
+        mkdir -p "$dir/docs/specs/example"
+        
+        # Create example requirements
+        cat > "$dir/docs/specs/example/reqs.md" << 'EOF'
+# Example Module Requirements
+
+## Overview
+This is an example specification module to demonstrate the ultraspec workflow.
+
+## User Stories
+1. As a developer, I want to see an example spec structure, so that I can create my own specs
+
+## Acceptance Criteria
+- [ ] Example requirements document exists
+- [ ] Example follows the standard template
+- [ ] Documentation is clear and helpful
+
+## Technical Requirements
+- Must follow ultraspec conventions
+- Should be self-documenting
+
+## Non-Functional Requirements
+- Easy to understand
+- Quick to read
+EOF
+        
+        # Create example tasks
+        cat > "$dir/docs/specs/example/tasks.md" << 'EOF'
+# Example Module - Task List
+
+## Overview
+Example tasks for demonstration purposes.
+
+## Tasks
+
+### Task 1: Review example structure
+- **ID**: EXAMPLE-001
+- **Type**: Documentation
+- **Priority**: Low
+- **Status**: ✅ Complete
+- **Description**: Review the example spec structure
+
+### Task 2: Create your own spec
+- **ID**: EXAMPLE-002
+- **Type**: Implementation
+- **Priority**: High
+- **Status**: ⏳ Pending
+- **Description**: Use /spec-create to create your first specification
+EOF
+    fi
+    
+    # Handle Makefile
+    print_info "Setting up Makefile..."
+    if [[ -f "$dir/Makefile" ]]; then
+        # Check if ultraspec targets already exist
+        if ! grep -q "spec-create" "$dir/Makefile" 2>/dev/null; then
+            print_verbose "Adding ultraspec targets to existing Makefile"
+            echo "" >> "$dir/Makefile"
+            echo "# ========================================" >> "$dir/Makefile"
+            echo "# ULTRASPEC TARGETS" >> "$dir/Makefile"
+            echo "# ========================================" >> "$dir/Makefile"
+            echo "" >> "$dir/Makefile"
+            cat "$temp_dir/Makefile.base" >> "$dir/Makefile"
+        else
+            print_verbose "Makefile already has ultraspec targets"
+        fi
+    else
+        # Create new Makefile
+        cp "$temp_dir/Makefile.base" "$dir/Makefile"
+        
+        # Add stack-specific targets if available
+        if [[ -f "$temp_dir/stacks/$stack/Makefile" ]]; then
+            cat "$temp_dir/stacks/$stack/Makefile" >> "$dir/Makefile"
+        fi
+    fi
+    
+    # Copy .claude directory if it doesn't exist
+    if [[ ! -d "$dir/.claude" ]]; then
+        print_info "Creating .claude directory..."
+        mkdir -p "$dir/.claude"
+    fi
+    
+    # Copy hooks if they don't exist
+    if [[ -d "$temp_dir/.claude/hooks" ]] && [[ ! -d "$dir/.claude/hooks" ]]; then
+        print_verbose "Installing Claude hooks"
+        cp -r "$temp_dir/.claude/hooks" "$dir/.claude/"
+    fi
+    
+    # Clean up
+    rm -rf "$temp_dir"
+    
+    print_success "Ultraspec installed successfully!"
+    return 0
+}
+
+# Verify installation
+verify_installation() {
+    local dir="$1"
+    
+    print_verbose "Verifying installation..."
+    
+    local all_good=true
+    
+    # Check for CLAUDE.md
+    if [[ -f "$dir/CLAUDE.md" ]]; then
+        if grep -q "/spec-" "$dir/CLAUDE.md" 2>/dev/null; then
+            print_success "CLAUDE.md contains ultraspec commands"
+        else
+            print_warning "CLAUDE.md exists but doesn't contain ultraspec commands"
+            all_good=false
+        fi
+    else
+        print_error "CLAUDE.md not found"
+        all_good=false
+    fi
+    
+    # Check for docs/specs
+    if [[ -d "$dir/docs/specs" ]]; then
+        print_success "Specification directory exists"
+    else
+        print_error "docs/specs directory not found"
+        all_good=false
+    fi
+    
+    # Check for Makefile targets
+    if [[ -f "$dir/Makefile" ]]; then
+        if grep -q "spec-create" "$dir/Makefile" 2>/dev/null; then
+            print_success "Makefile contains ultraspec targets"
+        else
+            print_warning "Makefile exists but doesn't contain ultraspec targets"
+        fi
+    fi
+    
+    return $([ "$all_good" = true ] && echo 0 || echo 1)
+}
+
+# Main function
+main() {
+    # Parse arguments
+    parse_arguments "$@"
+    
+    # Header
+    echo -e "${BOLD}${CYAN}╔════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${CYAN}║       Ultraspec Installer Plugin       ║${NC}"
+    echo -e "${BOLD}${CYAN}╚════════════════════════════════════════╝${NC}"
+    echo
+    
+    # Validate directory
+    print_info "Checking installation directory..."
+    if ! validate_directory "$INSTALL_DIR"; then
+        exit 1
+    fi
+    
+    local abs_dir="$(cd "$INSTALL_DIR" && pwd)"
+    print_success "Target directory: $abs_dir"
+    
+    # Check for existing installation
+    if check_existing_installation "$INSTALL_DIR"; then
+        if [[ "$FORCE" != "true" ]]; then
+            print_warning "Ultraspec appears to be already installed"
+            print_info "Use --force to reinstall"
+            exit 0
+        else
+            print_info "Force reinstalling ultraspec..."
+        fi
+    fi
+    
+    # Confirmation
+    if [[ "$SKIP_CONFIRMATION" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
+        echo
+        echo "This will install ultraspec in: $abs_dir"
+        echo "The following will be created/modified:"
+        echo "  - CLAUDE.md (project instructions)"
+        echo "  - docs/specs/ (specification directory)"
+        echo "  - Makefile (or Makefile modifications)"
+        echo
+        read -p "Continue with installation? [Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            print_info "Installation cancelled"
+            exit 0
+        fi
+    fi
+    
+    # Run installation
+    echo
+    if install_ultraspec "$INSTALL_DIR"; then
+        echo
+        
+        # Verify installation
+        verify_installation "$INSTALL_DIR"
+        
+        echo
+        echo -e "${BOLD}${GREEN}Next Steps:${NC}"
+        echo "1. Review the CLAUDE.md file for available commands"
+        echo "2. Start with: /spec-create <module-name>"
+        echo "3. Follow the spec-driven workflow:"
+        echo "   - /spec-reqs    → Define requirements"
+        echo "   - /spec-design  → Create technical design"
+        echo "   - /spec-tasks   → Generate task list"
+        echo "   - /spec-execute → Implement tasks"
+        echo
+        echo "Available Make commands:"
+        echo "  make spec-list   → List all specifications"
+        echo "  make spec-status → Check progress"
+        echo "  make help        → Show all available commands"
+        echo
+        echo "For more information, visit:"
+        echo "  https://github.com/aiconsultancy/ultraspec"
+    else
+        print_error "Installation failed"
+        print_info "Check the error messages above and try again"
+        exit 1
+    fi
+}
+
+# Run main function
+main "$@"

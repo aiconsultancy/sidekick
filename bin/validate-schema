@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Standalone schema validator for sidekick-get-pr-comments output
+# Usage: sidekick get pr-comments --json-only ... | validate-schema
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Read JSON from stdin
+json=$(cat)
+
+# Check if input is valid JSON
+if ! echo "$json" | jq empty 2>/dev/null; then
+    echo -e "${RED}✗ Invalid JSON input${NC}" >&2
+    exit 1
+fi
+
+# Validation function using jq
+validate() {
+    local json="$1"
+    
+    # Run comprehensive validation query
+    local result=$(echo "$json" | jq -r '
+    def check_required_fields:
+        has("pr_info") and 
+        has("pr_comments") and 
+        has("metadata") and 
+        has("errors");
+    
+    def check_pr_info:
+        .pr_info | 
+        (has("organization") and 
+         has("repository") and 
+         has("pr_number") and 
+         has("url") and 
+         has("valid"));
+    
+    def check_types:
+        (.pr_info.pr_number | type == "number") and
+        (.pr_comments | type == "array") and
+        (.errors | type == "array") and
+        (.metadata | type == "object");
+    
+    def check_metadata:
+        .metadata | 
+        (has("statistics") and 
+         has("duplicate_groups") and 
+         has("extraction_timestamp")) and
+        (.statistics | has("total_comments"));
+    
+    def check_comment_items:
+        .pr_comments | 
+        if length == 0 then 
+            true
+        else 
+            all(has("comment_id") and 
+                has("author") and 
+                has("body") and 
+                has("created_at") and 
+                has("type"))
+        end;
+    
+    if check_required_fields then
+        if check_pr_info then
+            if check_types then
+                if check_metadata then
+                    if check_comment_items then
+                        "valid"
+                    else
+                        "invalid: pr_comments items missing required fields"
+                    end
+                else
+                    "invalid: metadata structure invalid"
+                end
+            else
+                "invalid: field type mismatch"
+            end
+        else
+            "invalid: pr_info missing required fields"
+        end
+    else
+        "invalid: missing required top-level fields"
+    end
+    ' 2>/dev/null)
+    
+    echo "$result"
+}
+
+# Run validation
+result=$(validate "$json")
+
+if [[ "$result" == "valid" ]]; then
+    echo -e "${GREEN}✓ Schema validation passed${NC}"
+    # Output the JSON to stdout for piping
+    echo "$json"
+    exit 0
+else
+    echo -e "${RED}✗ Schema validation failed: ${result#invalid: }${NC}" >&2
+    exit 1
+fi

@@ -43,6 +43,15 @@
 - Respects environment variable defaults
 - Configurable limit for number of PRs shown
 
+### `sidekick install ultraspec`
+**Ultraspec Framework Installer**
+- Installs spec-driven development framework for Claude Code
+- Auto-detects project type and stack (Node.js, Python, Go, etc.)
+- Adds slash commands for specification workflow
+- Creates docs/specs/ directory structure
+- Integrates with existing Makefile or creates new one
+- Safe installation with backup of existing CLAUDE.md
+
 ### `sidekick update`
 **Self-Update Tool**
 - Check for and install updates to sidekick
