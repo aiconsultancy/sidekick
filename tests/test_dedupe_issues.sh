@@ -3,7 +3,7 @@
 # Test suite for sidekick-dedupe-issues plugin
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_PATH="$SCRIPT_DIR/../plugins/sidekick-dedupe-issues"
+PLUGIN_PATH="$SCRIPT_DIR/../plugins/sidekick-run-dedupe-issues"
 
 # Test colors
 GREEN='\033[0;32m'
