@@ -51,6 +51,13 @@
 # Extract PR comments
 ./sidekick get pr-comments https://github.com/org/repo/pull/123
 
+# Set defaults for your project (optional)
+export SIDEKICK_GITHUB_ORG=myorg
+export SIDEKICK_GITHUB_REPO=myrepo
+
+# Now you only need the PR number
+./sidekick get pr-comments 456
+
 # Get help for a specific command
 ./sidekick get pr-comments --help
 ```

@@ -7,6 +7,7 @@ set -e
 
 # Source all library functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/url_parser.sh"
 source "$SCRIPT_DIR/lib/gh_api.sh"
 source "$SCRIPT_DIR/lib/duplicate_detector.sh"
@@ -24,10 +25,10 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Default values
-OUTPUT_FORMAT="json"
+OUTPUT_FORMAT="${DEFAULT_OUTPUT_FORMAT:-json}"
 OUTPUT_FILE=""
-VERBOSE=false
-JSON_ONLY=false
+VERBOSE="${DEFAULT_VERBOSE:-false}"
+JSON_ONLY="${DEFAULT_JSON_ONLY:-false}"
 SHOW_CLOSED=false
 ERRORS_LIST="[]"
 
@@ -70,11 +71,22 @@ EXAMPLES:
     # Using separate arguments
     sidekick get pr-comments org repo 123
     
+    # Using environment variables (set once, use multiple times)
+    export SIDEKICK_GITHUB_ORG=myorg
+    export SIDEKICK_GITHUB_REPO=myrepo
+    sidekick get pr-comments 456  # Only need to provide PR number
+    
     # Output to file in YAML format
     sidekick get pr-comments -f yaml -o comments.yaml https://github.com/org/repo/pull/123
 
-ENVIRONMENT:
-    GITHUB_TOKEN    GitHub personal access token (required for private repos)
+ENVIRONMENT VARIABLES:
+    SIDEKICK_GITHUB_ORG     Default GitHub organization/user
+    SIDEKICK_GITHUB_REPO    Default GitHub repository name
+    SIDEKICK_GITHUB_USER    Default GitHub user (for user repos)
+    GITHUB_TOKEN            GitHub personal access token (required for private repos)
+    
+    When environment variables are set, you can provide just the PR number:
+    sidekick get pr-comments 123
 
 EOF
 }
@@ -150,13 +162,25 @@ main() {
     # Parse arguments first to determine mode
     parse_arguments "$@"
     
+    # Load and validate environment configuration
+    load_sidekick_config
+    
     output_header
     
-    # Check for required input
+    # Check for required input - use env vars as defaults if not provided
     if [[ -z "$PR_INPUT" ]]; then
-        output_error_tracked "No PR URL or arguments provided"
-        usage
-        exit 1
+        # Check if we can use environment variables
+        if has_github_defaults; then
+            output_verbose "No arguments provided, using environment defaults"
+            # Use the org or user from config
+            PR_INPUT="$(get_github_org_or_user)"
+            REPO_INPUT="$DEFAULT_GITHUB_REPO"
+            # PR_NUM_INPUT stays as provided or empty
+        else
+            output_error_tracked "No PR URL or arguments provided"
+            usage
+            exit 1
+        fi
     fi
     
     # Parse PR information
@@ -188,12 +212,34 @@ main() {
         PR_URL="$PR_INPUT"
         output_success "Parsed PR URL"
     else
-        # Separate arguments provided
-        PR_ORG="$PR_INPUT"
-        PR_REPO="$REPO_INPUT"
-        PR_NUMBER="$PR_NUM_INPUT"
+        # Separate arguments provided or from env vars
+        # If PR_INPUT is just a number and we have env vars, use them
+        if [[ "$PR_INPUT" =~ ^[0-9]+$ ]] && has_github_defaults; then
+            PR_ORG="$(get_github_org_or_user)"
+            PR_REPO="$DEFAULT_GITHUB_REPO"
+            PR_NUMBER="$PR_INPUT"
+            output_verbose "Using environment defaults: org=$PR_ORG, repo=$PR_REPO"
+        else
+            # Standard separate arguments with fallback to env vars
+            PR_ORG="${PR_INPUT:-$(get_github_org_or_user)}"
+            PR_REPO="${REPO_INPUT:-$DEFAULT_GITHUB_REPO}"
+            PR_NUMBER="$PR_NUM_INPUT"
+        fi
         
         output_verbose "Parsed args: org=$PR_ORG, repo=$PR_REPO, number=$PR_NUMBER"
+        
+        # Show if environment variables were used
+        local org_or_user=$(get_github_org_or_user)
+        if [[ "$PR_ORG" == "$org_or_user" ]] && [[ -n "$org_or_user" ]]; then
+            if [[ -n "$DEFAULT_GITHUB_ORG" ]]; then
+                output_verbose "Using SIDEKICK_GITHUB_ORG from environment"
+            elif [[ -n "$DEFAULT_GITHUB_USER" ]]; then
+                output_verbose "Using SIDEKICK_GITHUB_USER from environment"
+            fi
+        fi
+        if [[ "$PR_REPO" == "$DEFAULT_GITHUB_REPO" ]] && [[ -n "$DEFAULT_GITHUB_REPO" ]]; then
+            output_verbose "Using SIDEKICK_GITHUB_REPO from environment"
+        fi
         
         if [[ -z "$PR_ORG" ]] || [[ -z "$PR_REPO" ]] || [[ -z "$PR_NUMBER" ]]; then
             output_error_tracked "Missing required arguments: org, repo, and pr_number"
