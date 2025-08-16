@@ -14,15 +14,27 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 - Groups duplicate comments to reduce noise
 - Smart detection of approval patterns and emojis
 
-📊 **Rich Output Formats**
-- JSON output for programmatic processing
-- YAML output for human readability
-- Comprehensive metadata including timestamps and statistics
+📊 **Rich PR Metadata**
+- Complete PR information: title, description, state, author, branches
+- CI/Check status with detailed run information
+- Mergeable status, draft state, timestamps
+
+📈 **CI/Check Status Tracking**
+- Fetches GitHub Actions and check runs status
+- Shows pass/fail/pending counts
+- Individual check run details with conclusions
 
 🎨 **Beautiful CLI Interface**
 - Progress indicators with spinners
 - Color-coded output for better readability
+- JSON-only mode for clean programmatic output
 - Verbose mode for debugging
+
+📁 **Flexible Output Options**
+- JSON output for programmatic processing
+- YAML output for human readability
+- File output with summary display
+- Comprehensive error tracking
 
 ## Installation
 
@@ -114,6 +126,43 @@ Or using separate arguments:
 
 ```json
 {
+  "pr_info": {
+    "organization": "org",
+    "repository": "repo",
+    "pr_number": 123,
+    "url": "https://github.com/org/repo/pull/123",
+    "title": "feat: Add new feature",
+    "description": "This PR adds a new feature to improve...",
+    "state": "open",
+    "author": "username",
+    "created_at": "2024-01-01T10:00:00Z",
+    "updated_at": "2024-01-01T11:00:00Z",
+    "draft": false,
+    "mergeable": true,
+    "merged": false,
+    "base_branch": "main",
+    "head_branch": "feature-branch",
+    "head_sha": "abc123def456",
+    "checks": {
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "pending": 0,
+      "runs": [
+        {
+          "name": "Build",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Tests",
+          "status": "completed",
+          "conclusion": "failure"
+        }
+      ]
+    },
+    "valid": true
+  },
   "pr_comments": [
     {
       "comment_id": "123456",
@@ -141,7 +190,8 @@ Or using separate arguments:
       "group_2": ["345678", "901234"]
     },
     "extraction_timestamp": "2024-01-01T12:00:00Z"
-  }
+  },
+  "errors": []
 }
 ```
 

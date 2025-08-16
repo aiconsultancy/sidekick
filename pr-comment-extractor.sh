@@ -143,7 +143,7 @@ main() {
     fi
     
     # Parse PR information
-    output_step "1/6" "Parsing PR information"
+    output_step "1/7" "Parsing PR information"
     output_verbose "Input: PR_INPUT=$PR_INPUT, REPO_INPUT=$REPO_INPUT, PR_NUM_INPUT=$PR_NUM_INPUT"
     
     if [[ "$PR_INPUT" =~ ^https://github\.com/ ]]; then
@@ -206,7 +206,7 @@ main() {
     output_newline
     
     # Check gh CLI authentication
-    output_step "2/6" "Checking GitHub authentication"
+    output_step "2/7" "Checking GitHub authentication"
     output_verbose "Checking gh auth status"
     if ! gh auth status >/dev/null 2>&1; then
         output_warning "Not authenticated with GitHub"
@@ -241,7 +241,7 @@ main() {
     output_newline
     
     # Validate PR exists
-    output_step "3/6" "Validating PR exists"
+    output_step "3/7" "Validating PR exists"
     output_verbose "Checking if PR exists: repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER"
     
     pr_info=$(gh api "repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER" 2>/dev/null || echo "")
@@ -276,13 +276,26 @@ main() {
     
     # Extract PR metadata
     PR_TITLE=$(echo "$pr_info" | jq -r '.title // ""')
+    PR_BODY=$(echo "$pr_info" | jq -r '.body // ""')
     PR_STATE=$(echo "$pr_info" | jq -r '.state // ""')
     PR_AUTHOR=$(echo "$pr_info" | jq -r '.user.login // ""')
     PR_CREATED=$(echo "$pr_info" | jq -r '.created_at // ""')
+    PR_UPDATED=$(echo "$pr_info" | jq -r '.updated_at // ""')
+    PR_DRAFT=$(echo "$pr_info" | jq -r '.draft // false')
+    PR_MERGEABLE=$(echo "$pr_info" | jq -r '.mergeable // null')
+    PR_MERGED=$(echo "$pr_info" | jq -r '.merged // false')
+    PR_HEAD_SHA=$(echo "$pr_info" | jq -r '.head.sha // ""')
+    PR_BASE_BRANCH=$(echo "$pr_info" | jq -r '.base.ref // ""')
+    PR_HEAD_BRANCH=$(echo "$pr_info" | jq -r '.head.ref // ""')
     
     # Handle empty title
     if [[ -z "$PR_TITLE" ]]; then
         PR_TITLE="(No title)"
+    fi
+    
+    # Handle empty body/description
+    if [[ -z "$PR_BODY" ]] || [[ "$PR_BODY" == "null" ]]; then
+        PR_BODY="(No description)"
     fi
     
     output_success "PR validated: #$PR_NUMBER - $PR_TITLE"
@@ -290,7 +303,7 @@ main() {
     output_newline
     
     # Fetch PR data
-    output_step "4/6" "Fetching PR comments"
+    output_step "4/7" "Fetching PR comments"
     output_progress "  Fetching issue comments..."
     output_verbose "Fetching issue comments from API"
     issue_comments=$(fetch_pr_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
@@ -344,8 +357,51 @@ main() {
             reviews: $reviews
         }')
     
+    # Fetch CI/check status
+    output_step "5/7" "Fetching CI/check status"
+    output_verbose "Fetching check runs for commit: $PR_HEAD_SHA"
+    
+    # Fetch check runs if head SHA is available
+    checks_data="{}"
+    if [[ -n "$PR_HEAD_SHA" ]]; then
+        check_runs=$(gh api "repos/$PR_ORG/$PR_REPO/commits/$PR_HEAD_SHA/check-runs" 2>/dev/null || echo '{"check_runs": []}')
+        
+        # Parse check runs
+        if echo "$check_runs" | jq empty 2>/dev/null; then
+            checks_count=$(echo "$check_runs" | jq '.check_runs | length')
+            checks_summary=$(echo "$check_runs" | jq '[.check_runs[] | {name, status, conclusion}]')
+            
+            # Count by status
+            checks_passed=$(echo "$check_runs" | jq '[.check_runs[] | select(.conclusion == "success")] | length')
+            checks_failed=$(echo "$check_runs" | jq '[.check_runs[] | select(.conclusion == "failure")] | length')
+            checks_pending=$(echo "$check_runs" | jq '[.check_runs[] | select(.status != "completed")] | length')
+            
+            checks_data=$(jq -n \
+                --argjson runs "$checks_summary" \
+                --arg total "$checks_count" \
+                --arg passed "$checks_passed" \
+                --arg failed "$checks_failed" \
+                --arg pending "$checks_pending" \
+                '{
+                    total: ($total | tonumber),
+                    passed: ($passed | tonumber),
+                    failed: ($failed | tonumber),
+                    pending: ($pending | tonumber),
+                    runs: $runs
+                }')
+            
+            output_success "Found $checks_count checks (✓ $checks_passed passed, ✗ $checks_failed failed, ⏳ $checks_pending pending)"
+        else
+            output_warning "Unable to fetch check status"
+        fi
+    else
+        output_warning "No commit SHA available for checks"
+    fi
+    output_verbose "Checks data: $(echo "$checks_data" | jq -c .)"
+    output_newline
+    
     # Detect duplicates
-    output_step "5/6" "Analyzing comments for duplicates"
+    output_step "6/7" "Analyzing comments for duplicates"
     output_verbose "Starting duplicate detection"
     
     # Combine all comments for duplicate detection
@@ -375,23 +431,41 @@ main() {
         --arg number "$PR_NUMBER" \
         --arg url "$PR_URL" \
         --arg title "$PR_TITLE" \
+        --arg body "$PR_BODY" \
         --arg state "$PR_STATE" \
         --arg author "$PR_AUTHOR" \
         --arg created "$PR_CREATED" \
+        --arg updated "$PR_UPDATED" \
+        --arg draft "$PR_DRAFT" \
+        --arg mergeable "$PR_MERGEABLE" \
+        --arg merged "$PR_MERGED" \
+        --arg base_branch "$PR_BASE_BRANCH" \
+        --arg head_branch "$PR_HEAD_BRANCH" \
+        --arg head_sha "$PR_HEAD_SHA" \
+        --argjson checks "$checks_data" \
         '{
             organization: $org,
             repository: $repo,
             pr_number: ($number | tonumber),
             url: $url,
             title: $title,
+            description: $body,
             state: $state,
             author: $author,
             created_at: $created,
+            updated_at: $updated,
+            draft: ($draft | test("true")),
+            mergeable: (if $mergeable == "null" then null else ($mergeable | test("true")) end),
+            merged: ($merged | test("true")),
+            base_branch: $base_branch,
+            head_branch: $head_branch,
+            head_sha: $head_sha,
+            checks: $checks,
             valid: true
         }')
     
     # Format output
-    output_step "6/6" "Generating output"
+    output_step "7/7" "Generating output"
     output_verbose "Formatting output as $OUTPUT_FORMAT"
     output=$(format_complete_output "$all_data" "$duplicate_groups" "$OUTPUT_FORMAT" "$pr_metadata" "$ERRORS_LIST")
     
@@ -403,6 +477,9 @@ main() {
         output_section "Summary"
         total_comments=$((issue_count + review_count))
         output_info "PR" "#$PR_NUMBER - $PR_TITLE"
+        output_info "State" "$PR_STATE (Draft: $PR_DRAFT, Mergeable: $PR_MERGEABLE)"
+        output_info "Branches" "$PR_HEAD_BRANCH → $PR_BASE_BRANCH"
+        output_info "CI Status" "$(echo "$checks_data" | jq -r '"✓ \(.passed) passed, ✗ \(.failed) failed, ⏳ \(.pending) pending"')"
         output_info "Total Comments" "$total_comments"
         output_info "Duplicate Groups" "$(echo "$duplicate_groups" | jq 'keys | length')"
         output_info "Output Format" "$(echo $OUTPUT_FORMAT | tr '[:lower:]' '[:upper:]')"
