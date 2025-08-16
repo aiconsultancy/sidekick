@@ -210,37 +210,42 @@ main() {
     # Fetch PR data
     print_step "3/5" "Fetching PR comments"
     echo -n "  Fetching issue comments..."
-    issue_comments=$(fetch_pr_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER") &
-    pid=$!
-    if [[ "$VERBOSE" == "false" ]]; then
-        show_spinner $pid
+    issue_comments=$(fetch_pr_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
+    if [[ -z "$issue_comments" ]] || [[ "$issue_comments" == "null" ]]; then
+        issue_comments="[]"
     fi
-    wait $pid
-    issue_count=$(echo "$issue_comments" | jq 'length')
+    issue_count=$(echo "$issue_comments" | jq 'length // 0')
     print_success "Found $issue_count issue comments"
     
     echo -n "  Fetching review comments..."
-    review_comments=$(fetch_pr_review_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER") &
-    pid=$!
-    if [[ "$VERBOSE" == "false" ]]; then
-        show_spinner $pid
+    review_comments=$(fetch_pr_review_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
+    if [[ -z "$review_comments" ]] || [[ "$review_comments" == "null" ]]; then
+        review_comments="[]"
     fi
-    wait $pid
-    review_count=$(echo "$review_comments" | jq 'length')
+    review_count=$(echo "$review_comments" | jq 'length // 0')
     print_success "Found $review_count review comments"
     
     echo -n "  Fetching reviews..."
-    reviews=$(fetch_pr_reviews "$PR_ORG" "$PR_REPO" "$PR_NUMBER") &
-    pid=$!
-    if [[ "$VERBOSE" == "false" ]]; then
-        show_spinner $pid
+    reviews=$(fetch_pr_reviews "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
+    if [[ -z "$reviews" ]] || [[ "$reviews" == "null" ]]; then
+        reviews="[]"
     fi
-    wait $pid
-    reviews_count=$(echo "$reviews" | jq 'length')
+    reviews_count=$(echo "$reviews" | jq 'length // 0')
     print_success "Found $reviews_count reviews"
     echo ""
     
     # Combine all data
+    # Ensure all variables are valid JSON
+    if ! echo "$issue_comments" | jq empty 2>/dev/null; then
+        issue_comments="[]"
+    fi
+    if ! echo "$review_comments" | jq empty 2>/dev/null; then
+        review_comments="[]"
+    fi
+    if ! echo "$reviews" | jq empty 2>/dev/null; then
+        reviews="[]"
+    fi
+    
     all_data=$(jq -n \
         --argjson issue_comments "$issue_comments" \
         --argjson review_comments "$review_comments" \
