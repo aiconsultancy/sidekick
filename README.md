@@ -39,8 +39,16 @@
 **List GitHub Pull Requests**
 - Lists PRs from any GitHub repository
 - Supports filtering by state (open, closed, all)
+- JSON output mode with `-j` or `--json-only` flags
 - Respects environment variable defaults
 - Configurable limit for number of PRs shown
+
+### `sidekick update`
+**Self-Update Tool**
+- Check for and install updates to sidekick
+- Update to latest or specific version
+- Force reinstall option available
+- Safe update process with automatic backup
 
 ### `sidekick hello`
 **Example Plugin**
@@ -69,6 +77,9 @@ export SIDEKICK_GITHUB_REPO=myrepo
 
 # Actually close duplicate issues
 ./sidekick run dedupe-issues --confirm myorg myrepo
+
+# List PRs with JSON output
+./sidekick list prs -j microsoft vscode
 
 # Get help for a specific command
 ./sidekick get pr-comments --help
@@ -105,23 +116,36 @@ export SIDEKICK_GITHUB_REPO=myrepo
    gh auth login
    ```
 
-### Setup
+### Installation Methods
 
+#### Quick Install (Recommended)
+```bash
+# Install to ~/.local (user installation, no sudo required)
+curl -sSL https://github.com/OWNER/REPO/releases/download/VERSION/install.sh | bash
+```
+
+#### Manual Installation
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd pr-comment-extractor
+   cd sidekick
    ```
 
-2. Make the scripts executable:
+2. Install using make:
    ```bash
-   chmod +x sidekick sidekick-*
+   # User installation (recommended, no sudo)
+   make install
+   
+   # Or system-wide installation
+   make install-system
    ```
 
-3. (Optional) Add to PATH:
+#### Development Installation
+1. Clone and run from source:
    ```bash
-   sudo ln -s $(pwd)/sidekick /usr/local/bin/sidekick
-   # This will make 'sidekick' available globally
+   git clone <repository-url>
+   cd sidekick
+   ./sidekick --help
    ```
 
 ## Usage
@@ -336,6 +360,13 @@ code-review/
 ├── CLAUDE.md                   # Project context for AI assistants
 └── README.md                   # This file
 ```
+
+### Command Syntax
+
+Sidekick supports both space and hyphen-separated commands:
+- `sidekick get pr-comments` and `sidekick get-pr-comments` both work
+- `sidekick list prs` and `sidekick list-prs` both work
+- `sidekick run dedupe-issues` works with the verb-noun pattern
 
 ### Adding New Plugins
 
