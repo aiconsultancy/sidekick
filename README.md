@@ -1,46 +1,43 @@
 # Sidekick - Extensible Development Workflow Tool
 
-**Sidekick** is a modular command-line tool for development workflows, following a kubectl-like plugin architecture. It currently includes a powerful GitHub PR comment extractor and analyzer for generating structured data for task management and automated PR review workflows.
+**Sidekick** is a modular command-line tool for development workflows, following a kubectl-like plugin architecture. It provides a unified interface for various development tasks with automatic plugin discovery and environment-based configuration.
 
-## Features
+## Core Features
 
-✨ **Smart Comment Extraction**
-- Fetches issue comments, review comments, and reviews from GitHub PRs
-- Supports both public and private repositories (with authentication)
-- Handles pagination automatically for large PRs
-- Tracks comment status (resolved/ignored/pending) via keywords
+🔌 **Plugin Architecture**
+- Automatic discovery of plugins from `plugins/` folder
+- Support for any executable language (bash, python, node.js, etc.)
+- kubectl-like command structure (`sidekick <verb> <noun>`)
+- No configuration needed - just drop in executable scripts
 
-🔍 **Semantic Duplicate Detection**
-- Identifies semantically similar comments (e.g., "LGTM" and "Looks good to me")
-- Groups duplicate comments to reduce noise
-- Smart detection of approval patterns and emojis
-- Reduces redundancy in task generation
+🔧 **Environment Configuration**
+- Set defaults once, use everywhere
+- Support for GitHub org, repo, and user defaults
+- Override defaults with command-line arguments
+- Validation of environment variables
 
-📊 **Rich PR Metadata**
-- Complete PR information: title, description, state, author, branches
-- CI/Check status with detailed run information
-- Mergeable status, draft state, timestamps
-- Head commit SHA for precise status tracking
+## Available Plugins
 
-📈 **CI/Check Status Tracking**
-- Fetches GitHub Actions and check runs status
-- Shows pass/fail/pending counts
-- Individual check run details with conclusions
-- Real-time status for each CI workflow
+### `sidekick get pr-comments`
+**PR Comment Extraction & Analysis**
+- Extracts all comments from GitHub pull requests
+- Detects semantic duplicates and groups similar comments
+- Fetches CI/check status and PR metadata
+- Outputs structured JSON/YAML for LLM processing
+- Skips closed PRs by default (use `--show-closed` to override)
 
-🎨 **Beautiful CLI Interface**
-- Progress indicators with spinners
-- Color-coded output for better readability
-- JSON-only mode for clean programmatic output
-- Verbose mode for debugging
+### `sidekick list-prs`
+**List GitHub Pull Requests**
+- Lists PRs from any GitHub repository
+- Supports filtering by state (open, closed, all)
+- Respects environment variable defaults
+- Configurable limit for number of PRs shown
 
-📁 **Flexible Output Options**
-- JSON output for programmatic processing
-- YAML output for human readability
-- File output with summary display
-- Comprehensive error tracking and reporting
-- JSON schema output for validation
-- Minimal output for closed PRs (performance optimization)
+### `sidekick hello`
+**Example Plugin**
+- Simple greeting plugin demonstrating plugin basics
+- Shows how to access environment configuration
+- Template for creating new plugins
 
 ## Quick Start
 
@@ -271,9 +268,13 @@ The project follows a modular, plugin-based architecture:
 
 ```
 code-review/
-├── sidekick                    # Main entry point (kubectl-like)
-├── sidekick-get-pr-comments    # PR comment extraction command
-├── lib/
+├── sidekick                    # Main entry point (kubectl-like dispatcher)
+├── plugins/                    # Plugin directory (auto-discovered)
+│   ├── sidekick-get-pr-comments  # PR comment extraction
+│   ├── sidekick-list-prs         # List GitHub PRs
+│   └── sidekick-hello            # Example plugin
+├── lib/                        # Shared libraries
+│   ├── config.sh              # Environment configuration management
 │   ├── url_parser.sh          # URL parsing logic
 │   ├── gh_api.sh              # GitHub API interactions
 │   ├── duplicate_detector.sh  # Duplicate detection algorithms
@@ -284,26 +285,36 @@ code-review/
 ├── tests/
 │   ├── test_*.sh              # Test files
 │   └── run_tests.sh           # Test runner
-└── README.md
+├── CLAUDE.md                   # Project context for AI assistants
+└── README.md                   # This file
 ```
 
-### Adding New Commands
+### Adding New Plugins
 
-To add a new command to sidekick, create an executable script following the naming convention:
-- `sidekick-<verb>-<noun>` for verb-noun commands (e.g., `sidekick-get-issues`)
-- `sidekick-<command>` for single-word commands (e.g., `sidekick-init`)
+To add a new plugin to sidekick:
 
-The script can be in any language (bash, python, node.js, etc.) as long as it's executable.
+1. Create an executable script in the `plugins/` folder
+2. Follow the naming convention: `sidekick-<verb>-<noun>` or `sidekick-<command>`
+3. Make it executable: `chmod +x plugins/sidekick-your-plugin`
+4. It will be automatically discovered
 
-Example:
+#### Plugin Template:
 ```bash
-# Create a new command
-echo '#!/bin/bash\necho "Hello from my command!"' > sidekick-hello-world
-chmod +x sidekick-hello-world
+#!/bin/bash
 
-# Use it
-./sidekick hello world
+# Source shared libraries (optional)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/config.sh" 2>/dev/null || true
+
+# Your plugin logic here
+echo "Hello from my plugin!"
+
+# Access environment defaults
+echo "Org: ${DEFAULT_GITHUB_ORG:-not set}"
+echo "Repo: ${DEFAULT_GITHUB_REPO:-not set}"
 ```
+
+Plugins can be written in any language (bash, python, node.js, etc.) as long as they're executable.
 
 ### Configuration
 
@@ -380,6 +391,8 @@ cat pr_data.json | llm-cli "Extract actionable tasks from these PR comments"
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
+
+For detailed development guidelines and project context, see [CLAUDE.md](CLAUDE.md).
 
 ## License
 
