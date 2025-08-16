@@ -1,6 +1,6 @@
-# PR Comment Extractor & Analyzer
+# Sidekick - Extensible Development Workflow Tool
 
-A powerful bash script that extracts and analyzes GitHub Pull Request comments to generate structured data for task management and automated PR review workflows.
+**Sidekick** is a modular command-line tool for development workflows, following a kubectl-like plugin architecture. It currently includes a powerful GitHub PR comment extractor and analyzer for generating structured data for task management and automated PR review workflows.
 
 ## Features
 
@@ -42,6 +42,19 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 - JSON schema output for validation
 - Minimal output for closed PRs (performance optimization)
 
+## Quick Start
+
+```bash
+# List available commands
+./sidekick --help
+
+# Extract PR comments
+./sidekick get pr-comments https://github.com/org/repo/pull/123
+
+# Get help for a specific command
+./sidekick get pr-comments --help
+```
+
 ## Installation
 
 ### Prerequisites
@@ -80,14 +93,15 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
    cd pr-comment-extractor
    ```
 
-2. Make the script executable:
+2. Make the scripts executable:
    ```bash
-   chmod +x pr-comment-extractor.sh
+   chmod +x sidekick sidekick-*
    ```
 
 3. (Optional) Add to PATH:
    ```bash
-   sudo ln -s $(pwd)/pr-comment-extractor.sh /usr/local/bin/pr-comment-extractor
+   sudo ln -s $(pwd)/sidekick /usr/local/bin/sidekick
+   # This will make 'sidekick' available globally
    ```
 
 ## Usage
@@ -96,34 +110,34 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 
 Extract comments from a PR using its URL:
 ```bash
-./pr-comment-extractor.sh https://github.com/org/repo/pull/123
+./sidekick get pr-comments https://github.com/org/repo/pull/123
 ```
 
 Or using separate arguments:
 ```bash
-./pr-comment-extractor.sh org repo 123
+./sidekick get pr-comments org repo 123
 ```
 
 ### Advanced Options
 
 ```bash
 # Output to file in YAML format
-./pr-comment-extractor.sh -f yaml -o comments.yaml https://github.com/org/repo/pull/123
+./sidekick get pr-comments -f yaml -o comments.yaml https://github.com/org/repo/pull/123
 
 # JSON-only mode for clean output (no decorative text)
-./pr-comment-extractor.sh -j https://github.com/org/repo/pull/123
+./sidekick get pr-comments -j https://github.com/org/repo/pull/123
 
 # Enable verbose output for debugging
-./pr-comment-extractor.sh -v https://github.com/org/repo/pull/123
+./sidekick get pr-comments -v https://github.com/org/repo/pull/123
 
 # Fetch comments for closed PRs (by default, closed PRs return minimal info)
-./pr-comment-extractor.sh -s https://github.com/org/repo/pull/123
+./sidekick get pr-comments -s https://github.com/org/repo/pull/123
 
 # Get the JSON schema for the output format
-./pr-comment-extractor.sh --schema
+./sidekick get pr-comments --schema
 
 # Combine multiple options
-./pr-comment-extractor.sh -v -j -o output.json org repo 456
+./sidekick get pr-comments -v -j -o output.json org repo 456
 ```
 
 ### Command Line Options
@@ -142,7 +156,7 @@ Or using separate arguments:
 
 The tool outputs structured JSON (or YAML) data. A complete JSON schema is available by running:
 ```bash
-./pr-comment-extractor.sh --schema
+./sidekick get pr-comments --schema
 ```
 
 ### JSON Format
@@ -246,20 +260,42 @@ bash tests/test_integration.sh
 
 ## Architecture
 
-The project follows a modular architecture with separate libraries for each functionality:
+The project follows a modular, plugin-based architecture:
 
 ```
-pr-comment-extractor/
-├── pr-comment-extractor.sh    # Main script
+code-review/
+├── sidekick                    # Main entry point (kubectl-like)
+├── sidekick-get-pr-comments    # PR comment extraction command
 ├── lib/
 │   ├── url_parser.sh          # URL parsing logic
 │   ├── gh_api.sh              # GitHub API interactions
 │   ├── duplicate_detector.sh  # Duplicate detection algorithms
-│   └── output_formatter.sh    # Output formatting (JSON/YAML)
+│   ├── output_formatter.sh    # Output formatting (JSON/YAML)
+│   └── output_helpers.sh      # Output utility functions
+├── schema/
+│   └── pr-comments-output.schema.json  # JSON schema
 ├── tests/
 │   ├── test_*.sh              # Test files
 │   └── run_tests.sh           # Test runner
 └── README.md
+```
+
+### Adding New Commands
+
+To add a new command to sidekick, create an executable script following the naming convention:
+- `sidekick-<verb>-<noun>` for verb-noun commands (e.g., `sidekick-get-issues`)
+- `sidekick-<command>` for single-word commands (e.g., `sidekick-init`)
+
+The script can be in any language (bash, python, node.js, etc.) as long as it's executable.
+
+Example:
+```bash
+# Create a new command
+echo '#!/bin/bash\necho "Hello from my command!"' > sidekick-hello-world
+chmod +x sidekick-hello-world
+
+# Use it
+./sidekick hello world
 ```
 
 ## Implementation Concerns & Notes
@@ -306,7 +342,7 @@ The structured output from this tool is designed to be fed into Large Language M
 Example workflow:
 ```bash
 # Extract comments
-./pr-comment-extractor.sh -o pr_data.json https://github.com/org/repo/pull/123
+./sidekick get pr-comments -o pr_data.json https://github.com/org/repo/pull/123
 
 # Feed to LLM for task generation (example with a hypothetical LLM CLI)
 cat pr_data.json | llm-cli "Extract actionable tasks from these PR comments"

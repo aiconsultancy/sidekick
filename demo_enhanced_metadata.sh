@@ -9,7 +9,7 @@ echo "Testing with a real PR to show all the new metadata..."
 echo ""
 
 # Extract and show key metadata
-OUTPUT=$(./pr-comment-extractor.sh -j https://github.com/aiconsultancy/indra/pull/985 2>/dev/null)
+OUTPUT=$(./sidekick get pr-comments -j https://github.com/aiconsultancy/indra/pull/985 2>/dev/null)
 
 echo "📋 PR Information:"
 echo "=================="

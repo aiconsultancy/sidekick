@@ -50,7 +50,7 @@ show_spinner() {
 
 usage() {
     cat << EOF
-Usage: $(basename "$0") [OPTIONS] <PR_URL|org repo pr_number>
+Usage: sidekick get pr-comments [OPTIONS] <PR_URL|org repo pr_number>
 
 Extract and analyze GitHub PR comments for task generation.
 
@@ -65,13 +65,13 @@ OPTIONS:
 
 EXAMPLES:
     # Using PR URL
-    $(basename "$0") https://github.com/org/repo/pull/123
+    sidekick get pr-comments https://github.com/org/repo/pull/123
     
     # Using separate arguments
-    $(basename "$0") org repo 123
+    sidekick get pr-comments org repo 123
     
     # Output to file in YAML format
-    $(basename "$0") -f yaml -o comments.yaml https://github.com/org/repo/pull/123
+    sidekick get pr-comments -f yaml -o comments.yaml https://github.com/org/repo/pull/123
 
 ENVIRONMENT:
     GITHUB_TOKEN    GitHub personal access token (required for private repos)

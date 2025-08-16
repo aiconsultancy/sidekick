@@ -7,16 +7,16 @@ echo ""
 
 # Test 1: Get the JSON schema
 echo "Test 1: Getting JSON schema"
-echo "Command: ./pr-comment-extractor.sh --schema"
+echo "Command: ./sidekick get pr-comments --schema"
 echo "----------------------------------------"
-./pr-comment-extractor.sh --schema | jq -r '."$schema", .title' 2>/dev/null || echo "Schema test passed"
+./sidekick get pr-comments --schema | jq -r '."$schema", .title' 2>/dev/null || echo "Schema test passed"
 echo ""
 
 # Test 2: Test with a closed PR (should skip comments by default)
 echo "Test 2: Closed PR without --show-closed flag"
-echo "Command: ./pr-comment-extractor.sh -j https://github.com/aiconsultancy/indra/pull/1"
+echo "Command: ./sidekick get pr-comments -j https://github.com/aiconsultancy/indra/pull/1"
 echo "----------------------------------------"
-result=$(./pr-comment-extractor.sh -j https://github.com/aiconsultancy/indra/pull/1 2>/dev/null)
+result=$(./sidekick get pr-comments -j https://github.com/aiconsultancy/indra/pull/1 2>/dev/null)
 if [[ -n "$result" ]]; then
     echo "$result" | jq '{
         state: .pr_info.state,
@@ -32,9 +32,9 @@ echo ""
 
 # Test 3: Test with a closed PR with --show-closed flag
 echo "Test 3: Closed PR with --show-closed flag"
-echo "Command: ./pr-comment-extractor.sh -j -s https://github.com/aiconsultancy/indra/pull/1"
+echo "Command: ./sidekick get pr-comments -j -s https://github.com/aiconsultancy/indra/pull/1"
 echo "----------------------------------------"
-result=$(./pr-comment-extractor.sh -j -s https://github.com/aiconsultancy/indra/pull/1 2>/dev/null)
+result=$(./sidekick get pr-comments -j -s https://github.com/aiconsultancy/indra/pull/1 2>/dev/null)
 if [[ -n "$result" ]]; then
     echo "$result" | jq '{
         state: .pr_info.state,
@@ -49,9 +49,9 @@ echo ""
 
 # Test 4: Test with an open PR (should always fetch comments)
 echo "Test 4: Open PR (should always fetch comments)"
-echo "Command: ./pr-comment-extractor.sh -j https://github.com/aiconsultancy/indra/pull/985"
+echo "Command: ./sidekick get pr-comments -j https://github.com/aiconsultancy/indra/pull/985"
 echo "----------------------------------------"
-result=$(./pr-comment-extractor.sh -j https://github.com/aiconsultancy/indra/pull/985 2>/dev/null)
+result=$(./sidekick get pr-comments -j https://github.com/aiconsultancy/indra/pull/985 2>/dev/null)
 if [[ -n "$result" ]]; then
     echo "$result" | jq '{
         state: .pr_info.state,

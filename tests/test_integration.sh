@@ -1,7 +1,8 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAIN_SCRIPT="$SCRIPT_DIR/../pr-comment-extractor.sh"
+# Use sidekick command structure
+MAIN_SCRIPT="$SCRIPT_DIR/../sidekick get pr-comments"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
