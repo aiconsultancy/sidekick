@@ -293,7 +293,7 @@ main() {
         total_comments=$((issue_count + review_count))
         print_info "Total Comments" "$total_comments"
         print_info "Duplicate Groups" "$(echo "$duplicate_groups" | jq 'keys | length')"
-        print_info "Output Format" "${OUTPUT_FORMAT^^}"
+        print_info "Output Format" "$(echo $OUTPUT_FORMAT | tr '[:lower:]' '[:upper:]')"
         print_info "Output File" "$OUTPUT_FILE"
     else
         echo ""
