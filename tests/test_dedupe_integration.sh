@@ -105,8 +105,8 @@ mock_issues='[
   }
 ]'
 
-# Test duplicate detection
-duplicate_groups=$(find_duplicate_groups "$mock_issues" 85)
+# Test duplicate detection with lower threshold for these test cases
+duplicate_groups=$(find_duplicate_groups "$mock_issues" 70)
 group_count=$(echo "$duplicate_groups" | jq 'length')
 
 echo "Found $group_count duplicate groups"

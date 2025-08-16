@@ -81,13 +81,9 @@ normalize_title() {
     # Remove special characters except spaces
     title=$(echo "$title" | sed 's/[^a-z0-9 ]//g')
     
-    # Remove common stop words with word boundaries
-    local stop_words="the a an is are was were be been being have has had do does did will would could should may might must can could shall to of in for on at with by from about into through during before after above below between under over not"
-    
-    for word in $stop_words; do
-        # Use word boundaries and handle multiple spaces
-        title=$(echo " $title " | sed "s/ $word / /g" | sed 's/^ *//;s/ *$//')
-    done
+    # Remove common stop words efficiently using a single sed command
+    # Use space boundaries to ensure we only match whole words
+    title=$(echo " $title " | sed -E 's/ (the|a|an|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|could|should|may|might|must|can|shall|to|of|in|for|on|at|with|by|from|about|into|through|during|before|after|above|below|between|under|over|not) / /g')
     
     # Remove extra spaces and trim
     title=$(echo "$title" | tr -s ' ' | sed 's/^ *//;s/ *$//')
