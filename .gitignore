@@ -3,3 +3,5 @@
 .DS_Store
 test_output/
 *.cache
+.env
+.envrc
