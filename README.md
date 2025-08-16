@@ -305,6 +305,28 @@ chmod +x sidekick-hello-world
 ./sidekick hello world
 ```
 
+### Configuration
+
+Sidekick supports environment variables for common configuration:
+
+| Variable | Description |
+|----------|-------------|
+| `SIDEKICK_GITHUB_ORG` | Default GitHub organization/owner |
+| `SIDEKICK_GITHUB_REPO` | Default GitHub repository |
+| `SIDEKICK_GITHUB_USER` | Default GitHub user (fallback for org) |
+| `SIDEKICK_OUTPUT_FORMAT` | Default output format (json/yaml) |
+| `SIDEKICK_VERBOSE` | Enable verbose output by default |
+| `SIDEKICK_JSON_ONLY` | Output JSON only by default |
+
+Set these in your shell profile for persistent configuration:
+```bash
+# ~/.bashrc or ~/.zshrc
+export SIDEKICK_GITHUB_ORG=myorg
+export SIDEKICK_GITHUB_REPO=myrepo
+```
+
+Commands can use the shared configuration by sourcing `lib/config.sh`.
+
 ## Implementation Concerns & Notes
 
 ### Development Approach
