@@ -1,0 +1,68 @@
+{
+  "pr_comments": [
+    {
+      "comment_id": "1234567890",
+      "author": "developer1",
+      "body": "Great implementation! The refactoring looks clean.",
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T10:30:00Z",
+      "url": "https://github.com/org/repo/pull/985#issuecomment-1234567890",
+      "reactions": {
+        "thumbs_up": 2,
+        "heart": 1
+      },
+      "status": "pending",
+      "duplicate_group": "group_1",
+      "type": "issue_comment"
+    },
+    {
+      "comment_id": "1234567891",
+      "author": "reviewer2",
+      "body": "LGTM",
+      "created_at": "2024-01-15T11:00:00Z",
+      "updated_at": "2024-01-15T11:00:00Z",
+      "url": "https://github.com/org/repo/pull/985#issuecomment-1234567891",
+      "reactions": {},
+      "status": "pending",
+      "duplicate_group": "group_1",
+      "type": "issue_comment"
+    },
+    {
+      "comment_id": "1234567892",
+      "author": "developer1",
+      "body": "[RESOLVED] Fixed the typo in line 42",
+      "created_at": "2024-01-15T11:30:00Z",
+      "updated_at": "2024-01-15T11:30:00Z",
+      "url": "https://github.com/org/repo/pull/985#issuecomment-1234567892",
+      "reactions": {},
+      "status": "resolved",
+      "duplicate_group": null,
+      "type": "review_comment"
+    },
+    {
+      "comment_id": "1234567893",
+      "author": "reviewer3",
+      "body": "Please update the documentation to reflect these changes",
+      "created_at": "2024-01-15T12:00:00Z",
+      "updated_at": "2024-01-15T12:00:00Z",
+      "url": "https://github.com/org/repo/pull/985#issuecomment-1234567893",
+      "reactions": {},
+      "status": "pending",
+      "duplicate_group": null,
+      "type": "issue_comment"
+    }
+  ],
+  "metadata": {
+    "statistics": {
+      "total_comments": 4,
+      "issue_comments": 3,
+      "review_comments": 1,
+      "reviews": 0,
+      "duplicate_count": 2
+    },
+    "duplicate_groups": {
+      "group_1": ["1234567890", "1234567891"]
+    },
+    "extraction_timestamp": "2024-01-15T14:00:00Z"
+  }
+}
