@@ -245,7 +245,9 @@ main() {
     output_verbose "Checking if PR exists: repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER"
     
     pr_info=$(gh api "repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER" 2>/dev/null || echo "")
-    if [[ -z "$pr_info" ]]; then
+    
+    # Check if we got an error response or empty response
+    if [[ -z "$pr_info" ]] || [[ $(echo "$pr_info" | jq -r '.message // ""' 2>/dev/null) == "Not Found" ]]; then
         output_error_tracked "PR not found: $PR_URL"
         
         if [[ "$JSON_ONLY" == "true" ]]; then
@@ -277,6 +279,11 @@ main() {
     PR_STATE=$(echo "$pr_info" | jq -r '.state // ""')
     PR_AUTHOR=$(echo "$pr_info" | jq -r '.user.login // ""')
     PR_CREATED=$(echo "$pr_info" | jq -r '.created_at // ""')
+    
+    # Handle empty title
+    if [[ -z "$PR_TITLE" ]]; then
+        PR_TITLE="(No title)"
+    fi
     
     output_success "PR validated: #$PR_NUMBER - $PR_TITLE"
     output_verbose "PR state: $PR_STATE, author: $PR_AUTHOR"

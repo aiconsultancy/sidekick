@@ -31,7 +31,14 @@ fetch_pr_comments() {
     local pr_number="$3"
     
     local endpoint=$(build_pr_comments_endpoint "$org" "$repo" "$pr_number")
-    gh api "$endpoint" --paginate 2>/dev/null || echo "[]"
+    local result=$(gh api "$endpoint" --paginate 2>/dev/null || echo "[]")
+    
+    # Ensure we return valid JSON even if the API returns an error
+    if ! echo "$result" | jq empty 2>/dev/null; then
+        echo "[]"
+    else
+        echo "$result"
+    fi
 }
 
 # Fetch PR review comments
@@ -41,7 +48,14 @@ fetch_pr_review_comments() {
     local pr_number="$3"
     
     local endpoint=$(build_pr_review_comments_endpoint "$org" "$repo" "$pr_number")
-    gh api "$endpoint" --paginate 2>/dev/null || echo "[]"
+    local result=$(gh api "$endpoint" --paginate 2>/dev/null || echo "[]")
+    
+    # Ensure we return valid JSON even if the API returns an error
+    if ! echo "$result" | jq empty 2>/dev/null; then
+        echo "[]"
+    else
+        echo "$result"
+    fi
 }
 
 # Fetch PR reviews
@@ -51,7 +65,14 @@ fetch_pr_reviews() {
     local pr_number="$3"
     
     local endpoint=$(build_pr_reviews_endpoint "$org" "$repo" "$pr_number")
-    gh api "$endpoint" --paginate 2>/dev/null || echo "[]"
+    local result=$(gh api "$endpoint" --paginate 2>/dev/null || echo "[]")
+    
+    # Ensure we return valid JSON even if the API returns an error
+    if ! echo "$result" | jq empty 2>/dev/null; then
+        echo "[]"
+    else
+        echo "$result"
+    fi
 }
 
 # Fetch all PR data (comments, review comments, and reviews)
