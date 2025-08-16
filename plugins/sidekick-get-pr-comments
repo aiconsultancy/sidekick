@@ -6,7 +6,8 @@
 set -e
 
 # Source all library functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source the config library for access to environment variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/url_parser.sh"
 source "$SCRIPT_DIR/lib/gh_api.sh"
@@ -67,15 +68,15 @@ OPTIONS:
 EXAMPLES:
     # Using PR URL
     sidekick get pr-comments https://github.com/org/repo/pull/123
-    
+
     # Using separate arguments
     sidekick get pr-comments org repo 123
-    
+
     # Using environment variables (set once, use multiple times)
     export SIDEKICK_GITHUB_ORG=myorg
     export SIDEKICK_GITHUB_REPO=myrepo
     sidekick get pr-comments 456  # Only need to provide PR number
-    
+
     # Output to file in YAML format
     sidekick get pr-comments -f yaml -o comments.yaml https://github.com/org/repo/pull/123
 
@@ -84,7 +85,7 @@ ENVIRONMENT VARIABLES:
     SIDEKICK_GITHUB_REPO    Default GitHub repository name
     SIDEKICK_GITHUB_USER    Default GitHub user (for user repos)
     GITHUB_TOKEN            GitHub personal access token (required for private repos)
-    
+
     When environment variables are set, you can provide just the PR number:
     sidekick get pr-comments 123
 
@@ -161,12 +162,12 @@ parse_arguments() {
 main() {
     # Parse arguments first to determine mode
     parse_arguments "$@"
-    
+
     # Load and validate environment configuration
     load_sidekick_config
-    
+
     output_header
-    
+
     # Check for required input - use env vars as defaults if not provided
     if [[ -z "$PR_INPUT" ]]; then
         # Check if we can use environment variables
@@ -182,18 +183,18 @@ main() {
             exit 1
         fi
     fi
-    
+
     # Parse PR information
     output_step "1/7" "Parsing PR information"
     output_verbose "Input: PR_INPUT=$PR_INPUT, REPO_INPUT=$REPO_INPUT, PR_NUM_INPUT=$PR_NUM_INPUT"
-    
+
     if [[ "$PR_INPUT" =~ ^https://github\.com/ ]]; then
         # URL provided
         output_verbose "Detected URL format: $PR_INPUT"
         parse_pr_url "$PR_INPUT"
         if [[ -z "$PR_ORG" ]] || [[ -z "$PR_REPO" ]] || [[ -z "$PR_NUMBER" ]]; then
             output_error_tracked "Failed to parse PR URL: $PR_INPUT"
-            
+
             # Output error JSON if in JSON-only mode
             if [[ "$JSON_ONLY" == "true" ]]; then
                 local error_output=$(jq -n \
@@ -225,9 +226,9 @@ main() {
             PR_REPO="${REPO_INPUT:-$DEFAULT_GITHUB_REPO}"
             PR_NUMBER="$PR_NUM_INPUT"
         fi
-        
+
         output_verbose "Parsed args: org=$PR_ORG, repo=$PR_REPO, number=$PR_NUMBER"
-        
+
         # Show if environment variables were used
         local org_or_user=$(get_github_org_or_user)
         if [[ "$PR_ORG" == "$org_or_user" ]] && [[ -n "$org_or_user" ]]; then
@@ -240,10 +241,10 @@ main() {
         if [[ "$PR_REPO" == "$DEFAULT_GITHUB_REPO" ]] && [[ -n "$DEFAULT_GITHUB_REPO" ]]; then
             output_verbose "Using SIDEKICK_GITHUB_REPO from environment"
         fi
-        
+
         if [[ -z "$PR_ORG" ]] || [[ -z "$PR_REPO" ]] || [[ -z "$PR_NUMBER" ]]; then
             output_error_tracked "Missing required arguments: org, repo, and pr_number"
-            
+
             if [[ "$JSON_ONLY" == "true" ]]; then
                 local error_output=$(jq -n \
                     --argjson errors "$ERRORS_LIST" \
@@ -262,12 +263,12 @@ main() {
         PR_URL="https://github.com/$PR_ORG/$PR_REPO/pull/$PR_NUMBER"
         output_success "Parsed PR arguments"
     fi
-    
+
     output_info "Organization" "$PR_ORG"
     output_info "Repository" "$PR_REPO"
     output_info "PR Number" "#$PR_NUMBER"
     output_newline
-    
+
     # Check gh CLI authentication
     output_step "2/7" "Checking GitHub authentication"
     output_verbose "Checking gh auth status"
@@ -276,7 +277,7 @@ main() {
         output_print "  Run: gh auth login"
         output_print "  Or set GITHUB_TOKEN environment variable"
         output_error_tracked "GitHub authentication required"
-        
+
         if [[ "$JSON_ONLY" == "true" ]]; then
             local error_output=$(jq -n \
                 --arg org "$PR_ORG" \
@@ -302,17 +303,17 @@ main() {
     fi
     output_success "GitHub authentication verified"
     output_newline
-    
+
     # Validate PR exists
     output_step "3/7" "Validating PR exists"
     output_verbose "Checking if PR exists: repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER"
-    
+
     pr_info=$(gh api "repos/$PR_ORG/$PR_REPO/pulls/$PR_NUMBER" 2>/dev/null || echo "")
-    
+
     # Check if we got an error response or empty response
     if [[ -z "$pr_info" ]] || [[ $(echo "$pr_info" | jq -r '.message // ""' 2>/dev/null) == "Not Found" ]]; then
         output_error_tracked "PR not found: $PR_URL"
-        
+
         if [[ "$JSON_ONLY" == "true" ]]; then
             local error_output=$(jq -n \
                 --arg org "$PR_ORG" \
@@ -336,7 +337,7 @@ main() {
         fi
         exit 1
     fi
-    
+
     # Extract PR metadata
     PR_TITLE=$(echo "$pr_info" | jq -r '.title // ""')
     PR_BODY=$(echo "$pr_info" | jq -r '.body // ""')
@@ -350,26 +351,26 @@ main() {
     PR_HEAD_SHA=$(echo "$pr_info" | jq -r '.head.sha // ""')
     PR_BASE_BRANCH=$(echo "$pr_info" | jq -r '.base.ref // ""')
     PR_HEAD_BRANCH=$(echo "$pr_info" | jq -r '.head.ref // ""')
-    
+
     # Handle empty title
     if [[ -z "$PR_TITLE" ]]; then
         PR_TITLE="(No title)"
     fi
-    
+
     # Handle empty body/description
     if [[ -z "$PR_BODY" ]] || [[ "$PR_BODY" == "null" ]]; then
         PR_BODY="(No description)"
     fi
-    
+
     output_success "PR validated: #$PR_NUMBER - $PR_TITLE"
     output_verbose "PR state: $PR_STATE, author: $PR_AUTHOR"
     output_newline
-    
+
     # Check if PR is closed and if we should skip fetching comments
     if [[ "$PR_STATE" == "closed" ]] && [[ "$SHOW_CLOSED" != "true" ]]; then
         output_warning "PR is closed - skipping comment fetching (use --show-closed to fetch anyway)"
         output_newline
-        
+
         # Create minimal response for closed PR
         pr_metadata=$(jq -n \
             --arg org "$PR_ORG" \
@@ -410,7 +411,7 @@ main() {
                 skipped_comments: true,
                 skip_reason: "PR is closed"
             }')
-        
+
         # Create minimal output
         minimal_output=$(jq -n \
             --argjson pr_info "$pr_metadata" \
@@ -432,7 +433,7 @@ main() {
                 },
                 errors: $errors
             }')
-        
+
         # Output the minimal response
         if [[ "$OUTPUT_FORMAT" == "yaml" ]]; then
             # Convert to YAML if needed
@@ -446,9 +447,9 @@ main() {
         else
             output="$minimal_output"
         fi
-        
+
         output_result "$output" "$OUTPUT_FILE"
-        
+
         # Show summary if not in JSON-only mode
         if [[ "$JSON_ONLY" != "true" ]]; then
             output_section "Summary"
@@ -458,10 +459,10 @@ main() {
             output_newline
             output_success "${BOLD}${GREEN}PR information extracted (comments skipped for closed PR)${NC}"
         fi
-        
+
         exit 0
     fi
-    
+
     # Fetch PR data
     output_step "4/7" "Fetching PR comments"
     output_progress "  Fetching issue comments..."
@@ -473,7 +474,7 @@ main() {
     issue_count=$(echo "$issue_comments" | jq 'length // 0')
     output_success "Found $issue_count issue comments"
     output_verbose "Issue comments: $issue_count"
-    
+
     output_progress "  Fetching review comments..."
     output_verbose "Fetching review comments from API"
     review_comments=$(fetch_pr_review_comments "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
@@ -483,7 +484,7 @@ main() {
     review_count=$(echo "$review_comments" | jq 'length // 0')
     output_success "Found $review_count review comments"
     output_verbose "Review comments: $review_count"
-    
+
     output_progress "  Fetching reviews..."
     output_verbose "Fetching reviews from API"
     reviews=$(fetch_pr_reviews "$PR_ORG" "$PR_REPO" "$PR_NUMBER")
@@ -494,7 +495,7 @@ main() {
     output_success "Found $reviews_count reviews"
     output_verbose "Reviews: $reviews_count"
     output_newline
-    
+
     # Combine all data
     # Ensure all variables are valid JSON
     if ! echo "$issue_comments" | jq empty 2>/dev/null; then
@@ -506,7 +507,7 @@ main() {
     if ! echo "$reviews" | jq empty 2>/dev/null; then
         reviews="[]"
     fi
-    
+
     all_data=$(jq -n \
         --argjson issue_comments "$issue_comments" \
         --argjson review_comments "$review_comments" \
@@ -516,26 +517,26 @@ main() {
             review_comments: $review_comments,
             reviews: $reviews
         }')
-    
+
     # Fetch CI/check status
     output_step "5/7" "Fetching CI/check status"
     output_verbose "Fetching check runs for commit: $PR_HEAD_SHA"
-    
+
     # Fetch check runs if head SHA is available
     checks_data="{}"
     if [[ -n "$PR_HEAD_SHA" ]]; then
         check_runs=$(gh api "repos/$PR_ORG/$PR_REPO/commits/$PR_HEAD_SHA/check-runs" 2>/dev/null || echo '{"check_runs": []}')
-        
+
         # Parse check runs
         if echo "$check_runs" | jq empty 2>/dev/null; then
             checks_count=$(echo "$check_runs" | jq '.check_runs | length')
             checks_summary=$(echo "$check_runs" | jq '[.check_runs[] | {name, status, conclusion}]')
-            
+
             # Count by status
             checks_passed=$(echo "$check_runs" | jq '[.check_runs[] | select(.conclusion == "success")] | length')
             checks_failed=$(echo "$check_runs" | jq '[.check_runs[] | select(.conclusion == "failure")] | length')
             checks_pending=$(echo "$check_runs" | jq '[.check_runs[] | select(.status != "completed")] | length')
-            
+
             checks_data=$(jq -n \
                 --argjson runs "$checks_summary" \
                 --arg total "$checks_count" \
@@ -549,7 +550,7 @@ main() {
                     pending: ($pending | tonumber),
                     runs: $runs
                 }')
-            
+
             output_success "Found $checks_count checks (✓ $checks_passed passed, ✗ $checks_failed failed, ⏳ $checks_pending pending)"
         else
             output_warning "Unable to fetch check status"
@@ -559,20 +560,20 @@ main() {
     fi
     output_verbose "Checks data: $(echo "$checks_data" | jq -c .)"
     output_newline
-    
+
     # Detect duplicates
     output_step "6/7" "Analyzing comments for duplicates"
     output_verbose "Starting duplicate detection"
-    
+
     # Combine all comments for duplicate detection
     all_comments=$(echo "$all_data" | jq '[.issue_comments[], .review_comments[]]')
     duplicate_groups=$(find_duplicate_groups "$all_comments")
-    
+
     duplicate_count=0
     if [[ "$duplicate_groups" != "{}" ]]; then
         duplicate_count=$(echo "$duplicate_groups" | jq '[.[] | length] | add // 0')
     fi
-    
+
     if [[ $duplicate_count -gt 0 ]]; then
         output_warning "Found $duplicate_count comments in duplicate groups"
         if [[ "$VERBOSE" == "true" ]] && [[ "$JSON_ONLY" != "true" ]]; then
@@ -583,7 +584,7 @@ main() {
         output_success "No duplicate comments detected"
     fi
     output_newline
-    
+
     # Create PR metadata JSON
     pr_metadata=$(jq -n \
         --arg org "$PR_ORG" \
@@ -623,15 +624,15 @@ main() {
             checks: $checks,
             valid: true
         }')
-    
+
     # Format output
     output_step "7/7" "Generating output"
     output_verbose "Formatting output as $OUTPUT_FORMAT"
     output=$(format_complete_output "$all_data" "$duplicate_groups" "$OUTPUT_FORMAT" "$pr_metadata" "$ERRORS_LIST")
-    
+
     # Write output
     output_result "$output" "$OUTPUT_FILE"
-    
+
     # Show summary if output to file and not in JSON-only mode
     if [[ -n "$OUTPUT_FILE" ]] && [[ "$JSON_ONLY" != "true" ]]; then
         output_section "Summary"
@@ -645,7 +646,7 @@ main() {
         output_info "Output Format" "$(echo $OUTPUT_FORMAT | tr '[:lower:]' '[:upper:]')"
         output_info "Output File" "$OUTPUT_FILE"
     fi
-    
+
     output_newline
     output_success "${BOLD}${GREEN}PR comment extraction complete!${NC}"
 }

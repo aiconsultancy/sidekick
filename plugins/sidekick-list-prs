@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# List open PRs for a repository
+# Uses GitHub CLI and respects sidekick environment variables
+
+# Environment variable defaults
+DEFAULT_GITHUB_ORG="${SIDEKICK_GITHUB_ORG:-}"
+DEFAULT_GITHUB_REPO="${SIDEKICK_GITHUB_REPO:-}"
+
+# Parse arguments
+LIMIT=10
+STATE="open"
+ORG=""
+REPO=""
+
+usage() {
+    cat << EOF
+Usage: sidekick list-prs [options] [org] [repo]
+
+List pull requests for a GitHub repository.
+
+Options:
+    -l, --limit NUM    Number of PRs to show (default: 10)
+    -s, --state STATE  PR state: open, closed, all (default: open)
+    -h, --help         Show this help message
+
+Arguments:
+    org     GitHub organization (uses SIDEKICK_GITHUB_ORG if not provided)
+    repo    GitHub repository (uses SIDEKICK_GITHUB_REPO if not provided)
+
+Examples:
+    sidekick list-prs                    # Use environment defaults
+    sidekick list-prs facebook react     # Specific repo
+    sidekick list-prs -l 20 -s all      # Show 20 PRs, all states
+
+Environment:
+    SIDEKICK_GITHUB_ORG     Default organization
+    SIDEKICK_GITHUB_REPO    Default repository
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -l|--limit)
+            LIMIT="$2"
+            shift 2
+            ;;
+        -s|--state)
+            STATE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+        *)
+            # Positional arguments
+            if [[ -z "$ORG" ]]; then
+                ORG="$1"
+            elif [[ -z "$REPO" ]]; then
+                REPO="$1"
+            else
+                echo "Too many arguments"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Use environment defaults if not specified
+ORG="${ORG:-$DEFAULT_GITHUB_ORG}"
+REPO="${REPO:-$DEFAULT_GITHUB_REPO}"
+
+# Validate we have required info
+if [[ -z "$ORG" ]] || [[ -z "$REPO" ]]; then
+    echo "Error: Organization and repository are required"
+    echo "Set SIDEKICK_GITHUB_ORG and SIDEKICK_GITHUB_REPO or provide them as arguments"
+    exit 1
+fi
+
+# Check gh authentication
+if ! gh auth status >/dev/null 2>&1; then
+    echo "Error: Not authenticated with GitHub"
+    echo "Run: gh auth login"
+    exit 1
+fi
+
+# List PRs
+echo "📋 Pull Requests for $ORG/$REPO (state: $STATE, limit: $LIMIT)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Fetch and display PRs
+gh pr list \
+    --repo "$ORG/$REPO" \
+    --state "$STATE" \
+    --limit "$LIMIT"
+
+if [[ $? -ne 0 ]]; then
+    echo ""
+    echo "Failed to fetch PRs. Check that the repository exists and you have access."
+    exit 1
+fi

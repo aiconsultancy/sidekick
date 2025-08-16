@@ -30,7 +30,8 @@ print_color() {
 
 # Function to find available commands
 find_commands() {
-    local search_paths=("$SCRIPT_DIR" "$HOME/.local/bin" "/usr/local/bin")
+    # Include plugins folder in search paths
+    local search_paths=("$SCRIPT_DIR" "$SCRIPT_DIR/plugins" "$HOME/.local/bin" "/usr/local/bin")
     local commands=()
     
     for path in "${search_paths[@]}"; do
@@ -104,42 +105,47 @@ execute_command() {
     local noun=$2
     shift 2 || true
     
-    # Possible command formats to try
+    # Search paths - include plugins folder
+    local search_paths=("$SCRIPT_DIR" "$SCRIPT_DIR/plugins" "$HOME/.local/bin" "/usr/local/bin")
+    
+    # First, try verb-noun combination if noun is provided and not a flag
+    if [[ -n "$noun" ]] && [[ ! "$noun" =~ ^- ]]; then
+        local possibilities=(
+            "sidekick-${verb}-${noun}"
+            "sidekick-${verb}-${noun}.sh"
+            "sidekick-${verb}-${noun}.py"
+            "sidekick-${verb}-${noun}.js"
+        )
+        
+        for cmd_pattern in "${possibilities[@]}"; do
+            for path in "${search_paths[@]}"; do
+                local full_path="$path/$cmd_pattern"
+                if [[ -x "$full_path" ]]; then
+                    # Found verb-noun command
+                    exec "$full_path" "$@"
+                fi
+            done
+        done
+    fi
+    
+    # If verb-noun not found, try just the verb as a single command
+    # Put the noun back as an argument if it's not a flag
+    if [[ -n "$noun" ]] && [[ ! "$noun" =~ ^- ]]; then
+        set -- "$noun" "$@"
+    fi
+    
     local possibilities=(
-        "sidekick-${verb}-${noun}"
-        "sidekick-${verb}-${noun}.sh"
-        "sidekick-${verb}-${noun}.py"
-        "sidekick-${verb}-${noun}.js"
         "sidekick-${verb}"
         "sidekick-${verb}.sh"
         "sidekick-${verb}.py"
         "sidekick-${verb}.js"
     )
     
-    # If noun looks like a flag, it might be a single-word command
-    if [[ "$noun" =~ ^- ]] || [[ -z "$noun" ]]; then
-        # Put back the noun as an argument if it exists
-        if [[ -n "$noun" ]]; then
-            set -- "$noun" "$@"
-        fi
-        noun=""
-        # Try just the verb
-        possibilities=(
-            "sidekick-${verb}"
-            "sidekick-${verb}.sh"
-            "sidekick-${verb}.py"
-            "sidekick-${verb}.js"
-        )
-    fi
-    
-    # Search paths
-    local search_paths=("$SCRIPT_DIR" "$HOME/.local/bin" "/usr/local/bin")
-    
     for cmd_pattern in "${possibilities[@]}"; do
         for path in "${search_paths[@]}"; do
             local full_path="$path/$cmd_pattern"
             if [[ -x "$full_path" ]]; then
-                # Found executable command
+                # Found single-word command
                 exec "$full_path" "$@"
             fi
         done

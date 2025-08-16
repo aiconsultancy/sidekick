@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Example plugin for sidekick
+# This demonstrates how to create a simple plugin
+
+# Source the config library for access to environment variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/config.sh" 2>/dev/null || true
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Simple greeting function
+greet() {
+    local name="${1:-World}"
+    echo -e "${BOLD}${BLUE}Hello, ${GREEN}${name}${BLUE}!${NC}"
+    echo "This is an example sidekick plugin."
+    
+    # Show if we have GitHub defaults configured
+    if has_github_defaults 2>/dev/null; then
+        local org=$(get_github_org_or_user)
+        echo "Your default GitHub context: $org/$DEFAULT_GITHUB_REPO"
+    fi
+}
+
+# Handle arguments
+case "${1:-}" in
+    -h|--help)
+        echo "Usage: sidekick hello [name]"
+        echo ""
+        echo "A simple greeting plugin for sidekick."
+        echo ""
+        echo "Arguments:"
+        echo "  name    Optional name to greet (default: World)"
+        echo ""
+        echo "Examples:"
+        echo "  sidekick hello"
+        echo "  sidekick hello Alice"
+        ;;
+    *)
+        greet "$1"
+        ;;
+esac
