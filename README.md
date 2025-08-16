@@ -8,21 +8,25 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 - Fetches issue comments, review comments, and reviews from GitHub PRs
 - Supports both public and private repositories (with authentication)
 - Handles pagination automatically for large PRs
+- Tracks comment status (resolved/ignored/pending) via keywords
 
 🔍 **Semantic Duplicate Detection**
 - Identifies semantically similar comments (e.g., "LGTM" and "Looks good to me")
 - Groups duplicate comments to reduce noise
 - Smart detection of approval patterns and emojis
+- Reduces redundancy in task generation
 
 📊 **Rich PR Metadata**
 - Complete PR information: title, description, state, author, branches
 - CI/Check status with detailed run information
 - Mergeable status, draft state, timestamps
+- Head commit SHA for precise status tracking
 
 📈 **CI/Check Status Tracking**
 - Fetches GitHub Actions and check runs status
 - Shows pass/fail/pending counts
 - Individual check run details with conclusions
+- Real-time status for each CI workflow
 
 🎨 **Beautiful CLI Interface**
 - Progress indicators with spinners
@@ -34,7 +38,7 @@ A powerful bash script that extracts and analyzes GitHub Pull Request comments t
 - JSON output for programmatic processing
 - YAML output for human readability
 - File output with summary display
-- Comprehensive error tracking
+- Comprehensive error tracking and reporting
 
 ## Installation
 
@@ -104,11 +108,14 @@ Or using separate arguments:
 # Output to file in YAML format
 ./pr-comment-extractor.sh -f yaml -o comments.yaml https://github.com/org/repo/pull/123
 
+# JSON-only mode for clean output (no decorative text)
+./pr-comment-extractor.sh -j https://github.com/org/repo/pull/123
+
 # Enable verbose output for debugging
 ./pr-comment-extractor.sh -v https://github.com/org/repo/pull/123
 
 # Combine multiple options
-./pr-comment-extractor.sh -v -f json -o output.json org repo 456
+./pr-comment-extractor.sh -v -j -o output.json org repo 456
 ```
 
 ### Command Line Options
@@ -117,7 +124,8 @@ Or using separate arguments:
 |--------|-------------|
 | `-f, --format FORMAT` | Output format: `json` (default) or `yaml` |
 | `-o, --output FILE` | Write output to file instead of stdout |
-| `-v, --verbose` | Enable verbose output |
+| `-j, --json-only` | Output clean JSON only, no decorative text |
+| `-v, --verbose` | Enable verbose output for debugging |
 | `-h, --help` | Show help message |
 
 ## Output Structure
