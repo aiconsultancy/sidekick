@@ -1,161 +1,227 @@
-# Sidekick Project Context
+# CLAUDE.md
 
-## Overview
+This file provides guidance to Claude Code when working with code in this repository.
 
-Sidekick is a modular command-line tool for development workflows, designed with a kubectl-like plugin architecture. It provides a unified interface for various development tasks, with automatic plugin discovery and environment-based configuration.
+## Project Overview
 
-## Project Philosophy
+# sidekick
 
-1. **Modularity First**: Everything is a plugin, even core functionality
-2. **Zero Configuration**: Plugins are discovered automatically from the `plugins/` folder
-3. **Environment Aware**: Set defaults once via environment variables, override when needed
-4. **Language Agnostic**: Plugins can be written in any executable language
-5. **Test Driven**: All components should have corresponding tests
+sidekick
 
-## Key Components
+### Technology Stack
+- [PRIMARY LANGUAGE/FRAMEWORK]
+- [DATABASE]
+- [KEY LIBRARIES]
 
-### Main Dispatcher (`sidekick`)
-- Entry point for all commands
-- Automatically discovers plugins from multiple locations
-- Handles verb-noun command structure (e.g., `get pr-comments`)
-- Searches in: current directory, `plugins/` folder, `~/.local/bin`, `/usr/local/bin`
-
-### Plugin System
-- Plugins follow naming convention: `sidekick-<verb>-<noun>` or `sidekick-<command>`
-- Located in `plugins/` folder
-- Automatically discovered - no registration needed
-- Can access shared libraries from `lib/` folder
-
-### Shared Libraries (`lib/`)
-- `config.sh`: Environment variable management and validation
-- `output_helpers.sh`: Consistent output formatting functions
-- `gh_api.sh`: GitHub API interactions
-- `url_parser.sh`: URL parsing utilities
-- `duplicate_detector.sh`: Semantic duplicate detection
-- `output_formatter.sh`: JSON/YAML formatting
-
-## Environment Variables
-
-The following environment variables configure default behavior:
-
-- `SIDEKICK_GITHUB_ORG`: Default GitHub organization/owner
-- `SIDEKICK_GITHUB_REPO`: Default GitHub repository
-- `SIDEKICK_GITHUB_USER`: Default GitHub user (fallback for org)
-- `SIDEKICK_OUTPUT_FORMAT`: Default output format (json/yaml)
-- `SIDEKICK_VERBOSE`: Enable verbose output by default
-- `SIDEKICK_JSON_ONLY`: Output JSON only by default
-
-## Development Guidelines
-
-### Creating New Plugins
-
-1. Create executable script in `plugins/` folder
-2. Follow naming convention: `sidekick-<verb>-<noun>`
-3. Source shared libraries if needed:
-   ```bash
-   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-   source "$SCRIPT_DIR/lib/config.sh"
-   ```
-4. Handle `--help` flag
-5. Use environment defaults where appropriate
-6. Return appropriate exit codes
-
-### Error Handling
-
-- Use `set -e` in bash scripts for fail-fast behavior
-- Helper functions should always return 0 to avoid premature exit
-- Use `output_error_tracked` for error messages that should be included in JSON output
-- Validate inputs early and fail with clear error messages
-
-### Output Guidelines
-
-- Support both human-readable and JSON output
-- Use `output_*` functions from `output_helpers.sh` for consistency
-- In JSON-only mode (`-j` flag), suppress all decorative output
-- Always provide `--help` with clear usage examples
-
-## Testing
-
-### Manual Testing
-```bash
-# List all available commands
-./sidekick --list
-
-# Test a specific plugin
-./sidekick get pr-comments --help
-./sidekick get pr-comments https://github.com/org/repo/pull/123
-
-# Test with environment variables
-export SIDEKICK_GITHUB_ORG=facebook
-export SIDEKICK_GITHUB_REPO=react
-./sidekick get pr-comments 1
+### Project Structure
+```
+src/
+├── [main source directories]
+tests/
+├── [test directories]
+docs/
+└── specs/          # Spec-driven development documentation
 ```
 
-### Automated Testing
-```bash
-# Run all tests
-./run_tests.sh
+## Essential Commands
 
-# Run specific test suite
-bash tests/test_url_parsing.sh
+All commands are standardized through the Makefile:
+
+```bash
+# Core development commands
+make init      # Initialize project dependencies
+make build     # Build the project
+make test      # Run tests
+make format    # Format code (automatically run by hooks)
+make lint      # Run linters
+make clean     # Clean build artifacts
+
+# Additional commands
+make run       # Run the application
+make dev       # Run in development/watch mode
+make help      # Show all available commands
 ```
 
-## Common Tasks
+The Makefile provides a consistent interface across all technology stacks. Stack-specific commands are implemented in the Makefile based on your project type.
 
-### Adding GitHub API Functionality
-1. Add new functions to `lib/gh_api.sh`
-2. Follow existing patterns for error handling
-3. Return valid JSON even on error (empty array/object)
+## Spec-Driven Development Workflow
 
-### Adding Output Formats
-1. Modify `lib/output_formatter.sh`
-2. Add new format option to command-line parsing
-3. Update help text and documentation
+This project follows a spec-driven methodology for feature development.
 
-### Debugging Issues
-1. Use `-v` flag for verbose output
-2. Check `bash -x` for execution trace
-3. Verify environment variables are set correctly
-4. Check GitHub authentication with `gh auth status`
+### Workflow Commands
 
-## Known Issues & Solutions
+#### Spec-Driven Development
+- `/spec-create [module]` - Create new spec module
+- `/spec-reqs` - Generate requirements
+- `/spec-design` - Create technical design  
+- `/spec-tasks` - Generate task list
+- `/spec-execute [task]` - Implement specific task
+- `/spec-status` - Check progress
+- `/spec-list` - View all specs
 
-### Issue: Script exits silently
-**Cause**: `set -e` with functions returning non-zero
-**Solution**: Ensure helper functions return 0
+#### Git Workflow
+- `/commit [ticket-id]` - Commit staged changes
+- `/create-commits [ticket-id]` - Create atomic commits
+- `/create-pr` - Create pull request
 
-### Issue: Plugin not found
-**Cause**: Not executable or wrong location
-**Solution**: `chmod +x plugins/sidekick-*` and ensure in `plugins/` folder
+#### Maintenance
+- `/self-improve` - Analyze and improve project
 
-### Issue: Environment variables not working
-**Cause**: Invalid format or not exported
-**Solution**: Check validation regex in `lib/config.sh`
+### Workflow Philosophy
 
-## Future Enhancements
+#### Core Principles
+- **Structured Development**: Follow the sequential phases without skipping
+- **User Approval Required**: Each phase must be explicitly approved
+- **Atomic Implementation**: Execute one task at a time
+- **Requirement Traceability**: All tasks reference specific requirements
+- **Test-Driven Development**: MANDATORY for all implementation
 
-- [ ] Add caching for API responses
-- [ ] Support for GitLab and Bitbucket
-- [ ] Plugin dependency management
-- [ ] Interactive mode for complex operations
-- [ ] Plugin marketplace/registry
-- [ ] Automated plugin testing framework
+### Detailed Workflow Process
 
-## Contributing
+#### Phase 1: Requirements (`/spec-reqs`)
+- User stories: "As a [role], I want [feature], so that [benefit]"
+- Acceptance criteria in GIVEN-WHEN-THEN format
+- Include edge cases and non-functional requirements
+- **MUST** get approval before proceeding
 
-When contributing to this project:
+#### Phase 2: Design (`/spec-design`)
+- Technical architecture based on requirements
+- Component design, data models, interfaces
+- Include diagrams where helpful
+- Follow existing patterns in codebase
+- **MUST** get approval before proceeding
 
-1. Follow existing code style and patterns
-2. Add tests for new functionality
-3. Update documentation (README.md and help text)
-4. Ensure all existing tests pass
-5. Use meaningful commit messages
-6. Keep plugins focused on a single responsibility
+#### Phase 3: Tasks (`/spec-tasks`)
+- Break design into atomic, executable tasks
+- Each task references requirements
+- Include complexity estimates (XS/S/M/L)
+- Exclude deployment and operational tasks
+- **MUST** get approval before proceeding
 
-## Project Maintainer Notes
+#### Phase 4: Implementation (`/spec-execute`)
+- Execute ONE task at a time
+- **MANDATORY TDD Approach**:
+  - RED: Write failing tests first
+  - GREEN: Minimal code to pass tests
+  - REFACTOR: Improve code quality
+- Update tasks.md after completion
+- Stop for review after each task
 
-- Always test with both `set -e` enabled and disabled
-- Maintain backward compatibility when updating shared libraries
-- Document environment variables in both README and help text
-- Keep plugin dependencies minimal for portability
-- Regular testing on macOS and Linux environments
+### Workflow Rules
+- **Sequential**: Requirements → Design → Tasks → Implementation
+- **Approval Gates**: Wait for explicit approval at each phase
+- **Single Task**: Only one task in progress at a time
+- **TDD Mandatory**: No implementation without tests
+- **Traceability**: All work traces to requirements
+
+## Test-Driven Development (TDD)
+
+**CRITICAL**: All implementation MUST follow TDD methodology.
+
+### TDD Workflow
+1. **RED**: Write failing tests that define behavior
+2. **GREEN**: Write minimal code to pass tests
+3. **REFACTOR**: Improve code while keeping tests green
+
+### TDD Rules
+- Write test file before implementation file
+- Tests define the API/interface
+- Commit after each RED-GREEN-REFACTOR cycle
+- A task isn't complete without passing tests
+
+### Test Organization
+- [Your test file organization pattern]
+- [Test naming conventions]
+- [Test framework details]
+
+## Code Standards
+
+### General Principles
+- Follow existing patterns in the codebase
+- Keep functions/methods small and focused
+- Use descriptive names
+- Handle errors appropriately
+- Write self-documenting code
+
+### Formatting
+- Auto-formatting is configured via post-hook
+- Run formatter before committing
+- [Additional formatting rules]
+
+### [Language-Specific Standards]
+[Add your language-specific coding standards]
+
+## Documentation Structure
+
+All feature documentation lives in `docs/specs/`:
+
+```
+docs/specs/
+└── [module-name]/
+    ├── reqs.md      # Requirements document
+    ├── design.md    # Technical design
+    └── tasks.md     # Implementation tasks
+```
+
+### Documentation Rules
+1. All specs must be in `docs/specs/`
+2. Follow the template structure exactly
+3. Keep documentation up-to-date
+4. Mark tasks complete as you progress
+
+## Development Workflow
+
+### Before Starting Work
+1. Check `/spec-status` for current state
+2. Read all relevant documentation
+3. Understand existing patterns
+
+### During Development  
+1. Follow TDD strictly
+2. Make atomic commits
+3. Keep tests passing
+4. Update documentation
+
+### After Completing Tasks
+1. Ensure all tests pass
+2. Run formatter/linter
+3. Update tasks.md
+4. Wait for review
+
+## Environment Setup
+
+### Required Tools
+- [Tool 1]
+- [Tool 2]
+
+### Environment Variables
+```bash
+# Create .env.example (never commit .env)
+VARIABLE_NAME=example_value
+```
+
+## Common Operations
+
+### Running Tests
+```bash
+[Your test command]
+```
+
+### Building the Project
+```bash
+[Your build command]
+```
+
+### Starting Development Server
+```bash
+[Your dev server command]
+```
+
+## Troubleshooting
+
+### Common Issues
+[Add common issues and solutions]
+
+## Additional Notes
+
+[Any project-specific information that doesn't fit above]
