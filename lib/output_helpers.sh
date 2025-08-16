@@ -95,6 +95,7 @@ output_verbose() {
     if [[ "$VERBOSE" == "true" ]] && [[ "$JSON_ONLY" != "true" ]]; then
         echo -e "${CYAN}[DEBUG]${NC} $message" >&2
     fi
+    return 0
 }
 
 # Print section header

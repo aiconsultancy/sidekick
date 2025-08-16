@@ -78,6 +78,8 @@ load_sidekick_config() {
     if [[ -n "$DEFAULT_OUTPUT_FORMAT" ]]; then
         [[ "$silent" != "true" ]] && [[ "$VERBOSE" == "true" ]] && echo "[DEBUG] Environment: SIDEKICK_OUTPUT_FORMAT=$DEFAULT_OUTPUT_FORMAT" >&2
     fi
+    
+    return 0
 }
 
 # Get GitHub org with fallback to user
