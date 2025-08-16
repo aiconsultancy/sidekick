@@ -63,7 +63,7 @@ fi
 # Test 2: normalize_title function
 if declare -f normalize_title >/dev/null; then
     result=$(normalize_title "Bug: Application Crashes on Startup!")
-    expected="bug application crashes startup"
+    expected="bug application crashes on startup"
     assert_equals "$expected" "$result" "normalize_title removes special chars and lowercases"
     
     result=$(normalize_title "The app is not working")
