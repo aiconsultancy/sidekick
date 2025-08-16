@@ -6,7 +6,7 @@
 set -e
 
 # Source all library functions
-# Source the config library for access to environment variables
+# When in plugins folder, go up one level to find lib
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/url_parser.sh"
