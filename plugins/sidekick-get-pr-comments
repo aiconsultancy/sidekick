@@ -170,12 +170,14 @@ main() {
 
     # Check for required input - use env vars as defaults if not provided
     if [[ -z "$PR_INPUT" ]]; then
-        # Check if we can use environment variables
-        if has_github_defaults; then
-            output_verbose "No arguments provided, using environment defaults"
+        # Check if we can use environment variables or git detection
+        local org="$(get_github_org_or_user)"
+        local repo="$(get_github_repo)"
+        if [[ -n "$org" ]] && [[ -n "$repo" ]]; then
+            output_verbose "No arguments provided, using defaults (env or git)"
             # Use the org or user from config
-            PR_INPUT="$(get_github_org_or_user)"
-            REPO_INPUT="$DEFAULT_GITHUB_REPO"
+            PR_INPUT="$org"
+            REPO_INPUT="$repo"
             # PR_NUM_INPUT stays as provided or empty
         else
             output_error_tracked "No PR URL or arguments provided"
@@ -214,16 +216,18 @@ main() {
         output_success "Parsed PR URL"
     else
         # Separate arguments provided or from env vars
-        # If PR_INPUT is just a number and we have env vars, use them
-        if [[ "$PR_INPUT" =~ ^[0-9]+$ ]] && has_github_defaults; then
-            PR_ORG="$(get_github_org_or_user)"
-            PR_REPO="$DEFAULT_GITHUB_REPO"
+        # If PR_INPUT is just a number and we have defaults (env or git), use them
+        local org="$(get_github_org_or_user)"
+        local repo="$(get_github_repo)"
+        if [[ "$PR_INPUT" =~ ^[0-9]+$ ]] && [[ -n "$org" ]] && [[ -n "$repo" ]]; then
+            PR_ORG="$org"
+            PR_REPO="$repo"
             PR_NUMBER="$PR_INPUT"
-            output_verbose "Using environment defaults: org=$PR_ORG, repo=$PR_REPO"
+            output_verbose "Using defaults (env or git): org=$PR_ORG, repo=$PR_REPO"
         else
-            # Standard separate arguments with fallback to env vars
-            PR_ORG="${PR_INPUT:-$(get_github_org_or_user)}"
-            PR_REPO="${REPO_INPUT:-$DEFAULT_GITHUB_REPO}"
+            # Standard separate arguments with fallback to defaults
+            PR_ORG="${PR_INPUT:-$org}"
+            PR_REPO="${REPO_INPUT:-$(get_github_repo)}"
             PR_NUMBER="$PR_NUM_INPUT"
         fi
 

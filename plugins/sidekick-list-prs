@@ -3,9 +3,19 @@
 # List open PRs for a repository
 # Uses GitHub CLI and respects sidekick environment variables
 
-# Environment variable defaults
-DEFAULT_GITHUB_ORG="${SIDEKICK_GITHUB_ORG:-}"
-DEFAULT_GITHUB_REPO="${SIDEKICK_GITHUB_REPO:-}"
+# Source config library for git detection
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "$SCRIPT_DIR/lib/config.sh" ]]; then
+    source "$SCRIPT_DIR/lib/config.sh"
+    # Load config silently
+    load_sidekick_config true
+else
+    # Fallback to environment variables only
+    DEFAULT_GITHUB_ORG="${SIDEKICK_GITHUB_ORG:-}"
+    DEFAULT_GITHUB_REPO="${SIDEKICK_GITHUB_REPO:-}"
+    get_github_org_or_user() { echo "$DEFAULT_GITHUB_ORG"; }
+    get_github_repo() { echo "$DEFAULT_GITHUB_REPO"; }
+fi
 
 # Parse arguments
 LIMIT=10
@@ -90,14 +100,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use environment defaults if not specified
-ORG="${ORG:-$DEFAULT_GITHUB_ORG}"
-REPO="${REPO:-$DEFAULT_GITHUB_REPO}"
+# Use environment defaults or git detection if not specified
+ORG="${ORG:-$(get_github_org_or_user)}"
+REPO="${REPO:-$(get_github_repo)}"
 
 # Validate we have required info
 if [[ -z "$ORG" ]] || [[ -z "$REPO" ]]; then
     echo "Error: Organization and repository are required"
-    echo "Set SIDEKICK_GITHUB_ORG and SIDEKICK_GITHUB_REPO or provide them as arguments"
+    echo "Provide them as arguments, set SIDEKICK_GITHUB_ORG and SIDEKICK_GITHUB_REPO,"
+    echo "or run from a git repository"
     exit 1
 fi
 

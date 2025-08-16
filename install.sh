@@ -9,7 +9,13 @@
 set -e
 
 # Configuration
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local}"
+# Default to ~/.local if it exists or can be created, otherwise use ~/.sidekick
+if [[ -d "$HOME/.local" ]] || mkdir -p "$HOME/.local" 2>/dev/null; then
+    DEFAULT_INSTALL_DIR="$HOME/.local"
+else
+    DEFAULT_INSTALL_DIR="$HOME/.sidekick"
+fi
+INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 REPO_OWNER="${REPO_OWNER:-}"
 REPO_NAME="${REPO_NAME:-}"
 VERSION="${VERSION:-latest}"

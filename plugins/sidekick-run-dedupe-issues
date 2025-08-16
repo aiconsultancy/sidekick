@@ -11,6 +11,11 @@ source "$SCRIPT_DIR/lib/config.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/lib/output_helpers.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/plugins/lib/sidekick-run-dedupe-issues/issue_deduplicator.sh" 2>/dev/null || true
 
+# Load config silently if available
+if declare -f load_sidekick_config >/dev/null 2>&1; then
+    load_sidekick_config true
+fi
+
 # Default values
 THRESHOLD=85
 DRY_RUN=true
@@ -143,12 +148,18 @@ main() {
     # Parse arguments
     parse_arguments "$@"
     
-    # Load environment defaults if available
-    load_sidekick_config silent 2>/dev/null || true
+    # Use environment defaults or git detection if not provided
+    if declare -f get_github_org_or_user >/dev/null 2>&1; then
+        ORG="${ORG:-$(get_github_org_or_user)}"
+    else
+        ORG="${ORG:-$DEFAULT_GITHUB_ORG}"
+    fi
     
-    # Use environment defaults if not provided
-    ORG="${ORG:-$(get_github_org_or_user 2>/dev/null || echo '')}"
-    REPO="${REPO:-$DEFAULT_GITHUB_REPO}"
+    if declare -f get_github_repo >/dev/null 2>&1; then
+        REPO="${REPO:-$(get_github_repo)}"
+    else
+        REPO="${REPO:-$DEFAULT_GITHUB_REPO}"
+    fi
     
     # Validate required arguments
     if [[ -z "$ORG" ]] || [[ -z "$REPO" ]]; then
