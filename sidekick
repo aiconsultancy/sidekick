@@ -176,7 +176,7 @@ main() {
             echo "sidekick version $VERSION"
             exit 0
             ;;
-        --list|list)
+        --list)
             print_color "$BOLD" "Available sidekick commands:"
             find_commands | while read -r cmd; do
                 echo "  $(parse_command "$cmd")"
