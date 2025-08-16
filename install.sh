@@ -124,18 +124,25 @@ check_dependencies() {
 
 # Auto-detect GitHub repository from git remote if not provided
 detect_repo() {
+    # Default to the sidekick repository
+    if [ -z "$REPO_OWNER" ]; then
+        REPO_OWNER="aiconsultancy"
+    fi
+    if [ -z "$REPO_NAME" ]; then
+        REPO_NAME="sidekick"
+    fi
+    
+    # Only try to detect from git if we're in a git repo and both are still empty
     if [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
         if command -v git &> /dev/null && git remote get-url origin &> /dev/null; then
             local remote_url=$(git remote get-url origin)
             REPO_OWNER=$(echo "$remote_url" | sed -E 's/.*[:/]([^/]+)\/[^/]+\.git/\1/')
             REPO_NAME=$(echo "$remote_url" | sed -E 's/.*\/([^/]+)\.git/\1/')
             print_info "Detected repository: $REPO_OWNER/$REPO_NAME"
-        else
-            print_error "Could not detect repository. Please set REPO_OWNER and REPO_NAME environment variables."
-            print_info "Example: REPO_OWNER=myorg REPO_NAME=sidekick ./install.sh"
-            exit 1
         fi
     fi
+    
+    print_info "Installing from repository: $REPO_OWNER/$REPO_NAME"
 }
 
 # Get the latest release version
