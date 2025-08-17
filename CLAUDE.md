@@ -34,6 +34,34 @@ docs/
 - Plugin-specific libraries go in `plugins/lib/sidekick-<command>/`
 - This keeps plugin code organized and prevents naming conflicts
 
+### Library Functions
+
+The project provides common library functions in `lib/` directory:
+
+#### Output Helpers (`lib/output_helpers.sh`)
+Provides consistent output formatting functions that respect JSON_ONLY and VERBOSE modes:
+
+- `output_print(message)` - Print formatted output
+- `output_raw(message)` - Print raw output without formatting
+- `output_error(message)` - Print error messages to stderr
+- `output_success(message)` - Print success messages with green checkmark
+- `output_warning(message)` - Print warning messages with yellow warning icon
+- `output_info(label, value)` - Print labeled information (e.g., "Status: Processing...")
+- `output_verbose(message)` - Print debug messages when VERBOSE=true
+- `output_section(title)` - Print section headers
+- `output_header()` - Print formatted header box
+- `output_step(step, description)` - Print numbered step with description
+- `output_progress(message)` - Print progress indicator without newline
+- `output_result(output, [file])` - Output final result to stdout or file
+
+All output functions automatically handle:
+- Color formatting with ANSI escape codes
+- Suppression when JSON_ONLY=true
+- Verbose/debug output when VERBOSE=true
+
+#### Configuration (`lib/config.sh`)
+Manages configuration settings for plugins.
+
 ## Essential Commands
 
 All commands are standardized through the Makefile:
