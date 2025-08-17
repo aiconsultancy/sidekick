@@ -1,0 +1,373 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Load common libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_NAME="$(basename "$0")"
+PLUGIN_LIB_DIR="$SCRIPT_DIR/lib/$PLUGIN_NAME"
+
+# Load plugin-specific libraries
+if [[ -d "$PLUGIN_LIB_DIR" ]]; then
+    for lib in "$PLUGIN_LIB_DIR"/*.sh; do
+        [[ -f "$lib" ]] && source "$lib"
+    done
+fi
+
+# Also load the pr-rename specific library (if installed locally)
+PR_RENAME_LIB="$SCRIPT_DIR/lib/sidekick-pr-rename/extraction.sh"
+if [[ -f "$PR_RENAME_LIB" ]]; then
+    source "$PR_RENAME_LIB"
+fi
+
+# Load global libraries
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/output_helpers.sh"
+
+# Default configuration
+DEFAULT_AI_AGENT="claude"
+DEFAULT_CLAUDE_MODEL="claude-3-5-haiku-20241022"
+
+# Parse arguments
+PR_NUMBER=""
+FORCE=false
+DRY_RUN=false
+CHECK_ALL=false
+FIX_ALL=false
+AI_AGENT="${SIDEKICK_PR_RENAME_AI_AGENT:-$DEFAULT_AI_AGENT}"
+CLAUDE_MODEL="${SIDEKICK_PR_RENAME_CLAUDE_MODEL:-$DEFAULT_CLAUDE_MODEL}"
+
+show_help() {
+    cat << EOF
+Usage: sidekick pr-rename [OPTIONS] [PR_NUMBER]
+
+Rename pull request titles to include module identifiers (M{module}.{submodule}.{task})
+
+Arguments:
+  PR_NUMBER              PR number to rename (optional, uses current branch's PR if not specified)
+
+Options:
+  -h, --help            Show this help message
+  -f, --force           Force rename even if module ID already exists
+  -d, --dry-run         Show what would be renamed without making changes
+  -c, --check-all       Check all open PRs for missing/incorrect module IDs
+  --fix-all             Automatically fix all PRs that need module IDs (implies --check-all)
+  --ai-agent AGENT      AI agent to use for extraction (claude, opencode, etc.)
+  --model MODEL         Model to use for Claude (default: $DEFAULT_CLAUDE_MODEL)
+
+Environment Variables:
+  SIDEKICK_PR_RENAME_AI_AGENT    Default AI agent (default: claude)
+  SIDEKICK_PR_RENAME_CLAUDE_MODEL Claude model to use (default: claude-3-5-haiku-20241022)
+
+Examples:
+  sidekick pr-rename                  # Rename current branch's PR
+  sidekick pr-rename 123               # Rename PR #123
+  sidekick pr-rename -d                # Dry run to see what would happen
+  sidekick pr-rename -c                # Check all open PRs for missing module IDs
+  sidekick pr-rename -c -d             # Check all PRs without making changes
+  sidekick pr-rename --fix-all         # Fix all PRs that need module IDs
+  sidekick pr-rename --fix-all -d      # Preview what would be fixed
+  sidekick pr-rename --ai-agent opencode  # Use opencode for extraction
+
+EOF
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        -d|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -c|--check-all)
+            CHECK_ALL=true
+            shift
+            ;;
+        --fix-all)
+            FIX_ALL=true
+            CHECK_ALL=true  # fix-all implies check-all
+            shift
+            ;;
+        --ai-agent)
+            AI_AGENT="$2"
+            shift 2
+            ;;
+        --model)
+            CLAUDE_MODEL="$2"
+            shift 2
+            ;;
+        *)
+            if [[ -z "$PR_NUMBER" ]]; then
+                PR_NUMBER="$1"
+            else
+                output_error "Unknown argument: $1"
+                show_help
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Process all open PRs
+process_all_prs() {
+    # Temporarily disable error exit for this function
+    set +e
+    
+    output_info "Status" "Fetching all open PRs..."
+    
+    # Get all open PRs with their details
+    local pr_list=$(gh pr list --state open --json number,title,headRefName --limit 100 2>/dev/null) || {
+        output_error "Failed to fetch PR list"
+        return 1
+    }
+    
+    local pr_count=$(echo "$pr_list" | jq 'length')
+    if [[ "$pr_count" -eq 0 ]]; then
+        output_info "Status" "No open PRs found"
+        return 0
+    fi
+    
+    output_success "Found $pr_count open PRs"
+    echo
+    
+    local checked=0
+    local needs_update=0
+    local updated=0
+    local failed=0
+    
+    # Process each PR using a for loop instead of pipe to avoid subshell issues
+    local i=0
+    while [ $i -lt $pr_count ]; do
+        local pr_data=$(echo "$pr_list" | jq -c ".[$i]" 2>/dev/null || echo "")
+        if [[ -z "$pr_data" ]] || [[ "$pr_data" == "null" ]]; then
+            ((i++))
+            continue
+        fi
+        
+        local pr_number=$(echo "$pr_data" | jq -r '.number')
+        local pr_title=$(echo "$pr_data" | jq -r '.title')
+        local pr_branch=$(echo "$pr_data" | jq -r '.headRefName')
+        
+        ((checked++))
+        output_info "Progress" "[$checked/$pr_count] Checking PR #$pr_number: $pr_title"
+        
+        # Check if this PR needs updating
+        local module_id=""
+        local existing_id=""
+        local should_update=false
+        
+        # Extract module ID from branch name first
+        if [[ "$pr_branch" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            module_id="M${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+        else
+            # Try to extract from PR body using AI if no branch pattern
+            local pr_body=$(gh pr view "$pr_number" --json body --jq '.body // ""' 2>/dev/null || echo "")
+            if [[ -n "$pr_body" ]]; then
+                # Check if function exists before calling it
+                if declare -f extract_module_from_description >/dev/null 2>&1; then
+                    module_id=$(extract_module_from_description "$pr_body" "$AI_AGENT" "$CLAUDE_MODEL" 2>/dev/null || echo "")
+                else
+                    module_id=""
+                fi
+            fi
+        fi
+        
+        # Check if title already has a module ID
+        if [[ "$pr_title" =~ (M[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            existing_id="${BASH_REMATCH[1]}"
+        fi
+        
+        # Determine if update is needed
+        if [[ -n "$module_id" ]]; then
+            if [[ -z "$existing_id" ]]; then
+                should_update=true
+                echo "  → Missing module ID, should add: $module_id"
+            elif [[ "$existing_id" != "$module_id" ]]; then
+                should_update=true
+                echo "  → Wrong module ID ($existing_id), should be: $module_id"
+            else
+                echo "  ✓ Already has correct module ID: $existing_id"
+            fi
+        else
+            echo "  ⚠ No module ID found in branch or description"
+        fi
+        
+        if [[ "$should_update" == true ]]; then
+            ((needs_update++))
+            
+            # If fix-all mode, actually update the PR
+            if [[ "$FIX_ALL" == true ]] && [[ "$DRY_RUN" != true ]]; then
+                local new_title=$(echo "$pr_title" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+                new_title="$new_title ($module_id)"
+                
+                if gh pr edit "$pr_number" --title "$new_title" 2>/dev/null; then
+                    output_success "  ✓ Updated PR #$pr_number title"
+                    ((updated++))
+                else
+                    output_error "  ✗ Failed to update PR #$pr_number"
+                    ((failed++))
+                fi
+            elif [[ "$FIX_ALL" == true ]] && [[ "$DRY_RUN" == true ]]; then
+                local new_title=$(echo "$pr_title" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+                new_title="$new_title ($module_id)"
+                echo "  → Would update to: $new_title"
+            fi
+        fi
+        
+        echo
+        ((i++))
+    done
+    
+    # Summary
+    echo "=========================================="
+    output_success "Checked $checked PRs"
+    
+    if [[ "$needs_update" -gt 0 ]]; then
+        output_warning "$needs_update PRs need module ID updates"
+        
+        if [[ "$FIX_ALL" == true ]]; then
+            if [[ "$DRY_RUN" == true ]]; then
+                output_info "Action" "Run without --dry-run to apply the changes"
+            else
+                output_success "$updated PRs updated successfully"
+                if [[ "$failed" -gt 0 ]]; then
+                    output_error "$failed PRs failed to update"
+                fi
+            fi
+        else
+            output_info "Action" "Use --fix-all to automatically update them"
+        fi
+    else
+        output_success "All PRs have correct module IDs!"
+    fi
+    
+    # Re-enable error exit
+    set -e
+    return 0
+}
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    output_error "Not in a git repository"
+    exit 1
+fi
+
+# Check for gh CLI
+if ! command -v gh &> /dev/null; then
+    output_error "GitHub CLI (gh) is required but not installed"
+    output_info "Install" "brew install gh"
+    exit 1
+fi
+
+# Handle check-all and fix-all modes
+if [[ "$CHECK_ALL" == true ]]; then
+    process_all_prs
+    exit $?
+fi
+
+# Get current branch name if PR number not specified
+if [[ -z "$PR_NUMBER" ]]; then
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; then
+        output_error "Cannot determine PR from main/master branch. Please specify PR number."
+        exit 1
+    fi
+    
+    # Try to get PR number for current branch
+    PR_NUMBER=$(gh pr list --head "$CURRENT_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
+    
+    if [[ -z "$PR_NUMBER" ]]; then
+        output_error "No PR found for current branch '$CURRENT_BRANCH'"
+        output_info "Action" "Create a PR first with: gh pr create"
+        exit 1
+    fi
+    
+    output_info "PR" "Using PR #$PR_NUMBER for branch '$CURRENT_BRANCH'"
+fi
+
+# Get PR details
+output_info "Status" "Fetching PR #$PR_NUMBER details..."
+PR_DATA=$(gh pr view "$PR_NUMBER" --json title,body,headRefName 2>/dev/null) || {
+    output_error "Failed to fetch PR #$PR_NUMBER"
+    exit 1
+}
+
+PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+PR_BRANCH=$(echo "$PR_DATA" | jq -r '.headRefName')
+
+output_success "Found PR: $PR_TITLE"
+output_info "Branch" "$PR_BRANCH"
+
+# Try to extract module ID from branch name first
+MODULE_ID=""
+if [[ "$PR_BRANCH" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    MODULE_ID="M${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+    output_success "Extracted module ID from branch: $MODULE_ID"
+else
+    output_info "Status" "No module ID found in branch name, checking PR description..."
+    
+    # Try to extract from PR body using AI
+    if [[ -n "$PR_BODY" ]]; then
+        MODULE_ID=$(extract_module_from_description "$PR_BODY" "$AI_AGENT" "$CLAUDE_MODEL")
+        if [[ -n "$MODULE_ID" ]]; then
+            output_success "Extracted module ID from description: $MODULE_ID"
+        fi
+    fi
+fi
+
+if [[ -z "$MODULE_ID" ]]; then
+    output_error "Could not extract module ID from branch name or PR description"
+    output_info "Format" "Expected in branch: X.Y.Z (e.g., feat/2.2.13-feature-name)"
+    output_info "Format" "Or in description: 'module 2.2 ... Task 13' or similar"
+    exit 1
+fi
+
+# Check if title already has the same module ID anywhere in it
+if [[ "$PR_TITLE" =~ (M[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    EXISTING_ID="${BASH_REMATCH[1]}"
+    if [[ "$EXISTING_ID" == "$MODULE_ID" ]]; then
+        output_success "PR title already contains the correct module ID: $EXISTING_ID"
+        exit 0
+    elif [[ "$FORCE" != true ]]; then
+        output_warning "PR title contains a different module ID: $EXISTING_ID"
+        output_info "Extracted" "$MODULE_ID"
+        output_info "Action" "Use -f/--force to replace with the correct ID"
+        exit 0
+    else
+        output_info "Action" "Replacing existing module ID $EXISTING_ID with $MODULE_ID"
+    fi
+fi
+
+# Remove any existing module ID from the title (could be anywhere)
+NEW_TITLE=$(echo "$PR_TITLE" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+
+# Add new module ID at the end in parentheses
+NEW_TITLE="$NEW_TITLE ($MODULE_ID)"
+
+# Show what will be done
+echo
+output_info "Current title" "$PR_TITLE"
+output_success "New title: $NEW_TITLE"
+
+# Execute or dry run
+if [[ "$DRY_RUN" == true ]]; then
+    echo
+    output_warning "DRY RUN - No changes made"
+else
+    echo
+    output_info "Status" "Updating PR title..."
+    gh pr edit "$PR_NUMBER" --title "$NEW_TITLE" || {
+        output_error "Failed to update PR title"
+        exit 1
+    }
+    output_success "PR #$PR_NUMBER title updated successfully!"
+fi
