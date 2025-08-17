@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Load common libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_NAME="$(basename "$0")"
+PLUGIN_LIB_DIR="$SCRIPT_DIR/lib/$PLUGIN_NAME"
+
+# Load plugin-specific libraries
+if [[ -d "$PLUGIN_LIB_DIR" ]]; then
+    for lib in "$PLUGIN_LIB_DIR"/*.sh; do
+        [[ -f "$lib" ]] && source "$lib"
+    done
+fi
+
+# Load global libraries
+source "$SCRIPT_DIR/../lib/config.sh"
+source "$SCRIPT_DIR/../lib/output_helpers.sh"
+
+# Default configuration
+DEFAULT_AI_AGENT="claude"
+DEFAULT_CLAUDE_MODEL="claude-3-5-haiku-20241022"
+
+# Parse arguments
+PR_NUMBER=""
+FORCE=false
+DRY_RUN=false
+AI_AGENT="${SIDEKICK_PR_RENAME_AI_AGENT:-$DEFAULT_AI_AGENT}"
+CLAUDE_MODEL="${SIDEKICK_PR_RENAME_CLAUDE_MODEL:-$DEFAULT_CLAUDE_MODEL}"
+
+show_help() {
+    cat << EOF
+Usage: sidekick pr-rename [OPTIONS] [PR_NUMBER]
+
+Rename pull request titles to include module identifiers (M{module}.{submodule}.{task})
+
+Arguments:
+  PR_NUMBER              PR number to rename (optional, uses current branch's PR if not specified)
+
+Options:
+  -h, --help            Show this help message
+  -f, --force           Force rename even if module ID already exists
+  -d, --dry-run         Show what would be renamed without making changes
+  --ai-agent AGENT      AI agent to use for extraction (claude, opencode, etc.)
+  --model MODEL         Model to use for Claude (default: $DEFAULT_CLAUDE_MODEL)
+
+Environment Variables:
+  SIDEKICK_PR_RENAME_AI_AGENT    Default AI agent (default: claude)
+  SIDEKICK_PR_RENAME_CLAUDE_MODEL Claude model to use (default: claude-3-5-haiku-20241022)
+
+Examples:
+  sidekick pr-rename                  # Rename current branch's PR
+  sidekick pr-rename 123               # Rename PR #123
+  sidekick pr-rename -d                # Dry run to see what would happen
+  sidekick pr-rename --ai-agent opencode  # Use opencode for extraction
+
+EOF
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        -d|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --ai-agent)
+            AI_AGENT="$2"
+            shift 2
+            ;;
+        --model)
+            CLAUDE_MODEL="$2"
+            shift 2
+            ;;
+        *)
+            if [[ -z "$PR_NUMBER" ]]; then
+                PR_NUMBER="$1"
+            else
+                error "Unknown argument: $1"
+                show_help
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    error "Not in a git repository"
+    exit 1
+fi
+
+# Check for gh CLI
+if ! command -v gh &> /dev/null; then
+    error "GitHub CLI (gh) is required but not installed"
+    info "Install with: brew install gh"
+    exit 1
+fi
+
+# Get current branch name if PR number not specified
+if [[ -z "$PR_NUMBER" ]]; then
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; then
+        error "Cannot determine PR from main/master branch. Please specify PR number."
+        exit 1
+    fi
+    
+    # Try to get PR number for current branch
+    PR_NUMBER=$(gh pr list --head "$CURRENT_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
+    
+    if [[ -z "$PR_NUMBER" ]]; then
+        error "No PR found for current branch '$CURRENT_BRANCH'"
+        info "Create a PR first with: gh pr create"
+        exit 1
+    fi
+    
+    info "Using PR #$PR_NUMBER for branch '$CURRENT_BRANCH'"
+fi
+
+# Get PR details
+info "Fetching PR #$PR_NUMBER details..."
+PR_DATA=$(gh pr view "$PR_NUMBER" --json title,body,headRefName 2>/dev/null) || {
+    error "Failed to fetch PR #$PR_NUMBER"
+    exit 1
+}
+
+PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+PR_BRANCH=$(echo "$PR_DATA" | jq -r '.headRefName')
+
+success "Found PR: $PR_TITLE"
+info "Branch: $PR_BRANCH"
+
+# Try to extract module ID from branch name first
+MODULE_ID=""
+if [[ "$PR_BRANCH" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    MODULE_ID="M${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+    success "Extracted module ID from branch: $MODULE_ID"
+else
+    info "No module ID found in branch name, checking PR description..."
+    
+    # Try to extract from PR body using AI
+    if [[ -n "$PR_BODY" ]]; then
+        MODULE_ID=$(extract_module_from_description "$PR_BODY" "$AI_AGENT" "$CLAUDE_MODEL")
+        if [[ -n "$MODULE_ID" ]]; then
+            success "Extracted module ID from description: $MODULE_ID"
+        fi
+    fi
+fi
+
+if [[ -z "$MODULE_ID" ]]; then
+    error "Could not extract module ID from branch name or PR description"
+    info "Expected format in branch: X.Y.Z (e.g., feat/2.2.13-feature-name)"
+    info "Or in description: 'module 2.2 ... Task 13' or similar"
+    exit 1
+fi
+
+# Check if title already has the same module ID anywhere in it
+if [[ "$PR_TITLE" =~ (M[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    EXISTING_ID="${BASH_REMATCH[1]}"
+    if [[ "$EXISTING_ID" == "$MODULE_ID" ]]; then
+        success "PR title already contains the correct module ID: $EXISTING_ID"
+        exit 0
+    elif [[ "$FORCE" != true ]]; then
+        warning "PR title contains a different module ID: $EXISTING_ID"
+        info "Extracted module ID: $MODULE_ID"
+        info "Use -f/--force to replace with the correct ID"
+        exit 0
+    else
+        info "Replacing existing module ID $EXISTING_ID with $MODULE_ID"
+    fi
+fi
+
+# Remove any existing module ID from the title (could be anywhere)
+NEW_TITLE=$(echo "$PR_TITLE" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+
+# Add new module ID at the end in parentheses
+NEW_TITLE="$NEW_TITLE ($MODULE_ID)"
+
+# Show what will be done
+echo
+info "Current title: $PR_TITLE"
+success "New title:     $NEW_TITLE"
+
+# Execute or dry run
+if [[ "$DRY_RUN" == true ]]; then
+    echo
+    warning "DRY RUN - No changes made"
+else
+    echo
+    info "Updating PR title..."
+    gh pr edit "$PR_NUMBER" --title "$NEW_TITLE" || {
+        error "Failed to update PR title"
+        exit 1
+    }
+    success "PR #$PR_NUMBER title updated successfully!"
+fi

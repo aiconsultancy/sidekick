@@ -52,6 +52,15 @@
 - Integrates with existing Makefile or creates new one
 - Safe installation with backup of existing CLAUDE.md
 
+### `sidekick pr-rename`
+**Pull Request Title Module ID Manager**
+- Automatically adds module identifiers to PR titles (M{module}.{submodule}.{task})
+- Extracts module IDs from branch names (e.g., feat/2.2.13-feature)
+- AI-powered extraction from PR descriptions using Claude or OpenCode
+- Detects existing module IDs to avoid duplicates
+- Dry-run mode for previewing changes
+- Force mode to replace incorrect module IDs
+
 ### `sidekick update`
 **Self-Update Tool**
 - Check for and install updates to sidekick
@@ -90,9 +99,14 @@ export SIDEKICK_GITHUB_REPO=myrepo
 # List PRs with JSON output
 ./sidekick list prs -j microsoft vscode
 
+# Rename PR title to include module ID
+./sidekick pr-rename                  # Current branch's PR
+./sidekick pr-rename 123 --dry-run    # Preview changes for PR #123
+
 # Get help for a specific command
 ./sidekick get pr-comments --help
 ./sidekick run dedupe-issues --help
+./sidekick pr-rename --help
 ```
 
 ## Installation
