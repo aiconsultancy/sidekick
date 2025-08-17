@@ -14,8 +14,33 @@ if [[ -d "$PLUGIN_LIB_DIR" ]]; then
 fi
 
 # Load global libraries
-source "$SCRIPT_DIR/../lib/config.sh"
-source "$SCRIPT_DIR/../lib/output_helpers.sh"
+source "$SCRIPT_DIR/../lib/config.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/../lib/output_helpers.sh" 2>/dev/null || true
+
+# Define helper functions if not already defined
+if ! command -v info &> /dev/null; then
+    info() {
+        echo "ℹ $1"
+    }
+fi
+
+if ! command -v success &> /dev/null; then
+    success() {
+        echo "✓ $1"
+    }
+fi
+
+if ! command -v error &> /dev/null; then
+    error() {
+        echo "✗ $1" >&2
+    }
+fi
+
+if ! command -v warning &> /dev/null; then
+    warning() {
+        echo "⚠ $1"
+    }
+fi
 
 # Default configuration
 DEFAULT_AI_AGENT="claude"
@@ -32,7 +57,7 @@ CLAUDE_MODEL="${SIDEKICK_PR_RENAME_CLAUDE_MODEL:-$DEFAULT_CLAUDE_MODEL}"
 
 show_help() {
     cat << EOF
-Usage: sidekick pr-rename [OPTIONS] [PR_NUMBER]
+Usage: sidekick run pr-rename [OPTIONS] [PR_NUMBER]
 
 Rename pull request titles to include module identifiers (M{module}.{submodule}.{task})
 
@@ -53,14 +78,14 @@ Environment Variables:
   SIDEKICK_PR_RENAME_CLAUDE_MODEL Claude model to use (default: claude-3-5-haiku-20241022)
 
 Examples:
-  sidekick pr-rename                  # Rename current branch's PR
-  sidekick pr-rename 123               # Rename PR #123
-  sidekick pr-rename -d                # Dry run to see what would happen
-  sidekick pr-rename -c                # Check all open PRs for missing module IDs
-  sidekick pr-rename -c -d             # Check all PRs without making changes
-  sidekick pr-rename --fix-all         # Fix all PRs that need module IDs
-  sidekick pr-rename --fix-all -d      # Preview what would be fixed
-  sidekick pr-rename --ai-agent opencode  # Use opencode for extraction
+  sidekick run pr-rename                  # Rename current branch's PR
+  sidekick run pr-rename 123               # Rename PR #123
+  sidekick run pr-rename -d                # Dry run to see what would happen
+  sidekick run pr-rename -c                # Check all open PRs for missing module IDs
+  sidekick run pr-rename -c -d             # Check all PRs without making changes
+  sidekick run pr-rename --fix-all         # Fix all PRs that need module IDs
+  sidekick run pr-rename --fix-all -d      # Preview what would be fixed
+  sidekick run pr-rename --ai-agent opencode  # Use opencode for extraction
 
 EOF
 }
