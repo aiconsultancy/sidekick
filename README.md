@@ -60,6 +60,8 @@
 - Detects existing module IDs to avoid duplicates
 - Dry-run mode for previewing changes
 - Force mode to replace incorrect module IDs
+- **Batch processing**: Check all open PRs with `--check-all`
+- **Auto-fix**: Fix all PRs that need updates with `--fix-all`
 
 ### `sidekick update`
 **Self-Update Tool**
@@ -102,6 +104,11 @@ export SIDEKICK_GITHUB_REPO=myrepo
 # Rename PR title to include module ID
 ./sidekick pr-rename                  # Current branch's PR
 ./sidekick pr-rename 123 --dry-run    # Preview changes for PR #123
+
+# Batch operations
+./sidekick pr-rename --check-all      # Check all open PRs
+./sidekick pr-rename --fix-all        # Fix all PRs that need module IDs
+./sidekick pr-rename --fix-all -d     # Preview what would be fixed
 
 # Get help for a specific command
 ./sidekick get pr-comments --help

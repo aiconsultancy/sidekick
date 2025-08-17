@@ -25,6 +25,8 @@ DEFAULT_CLAUDE_MODEL="claude-3-5-haiku-20241022"
 PR_NUMBER=""
 FORCE=false
 DRY_RUN=false
+CHECK_ALL=false
+FIX_ALL=false
 AI_AGENT="${SIDEKICK_PR_RENAME_AI_AGENT:-$DEFAULT_AI_AGENT}"
 CLAUDE_MODEL="${SIDEKICK_PR_RENAME_CLAUDE_MODEL:-$DEFAULT_CLAUDE_MODEL}"
 
@@ -41,6 +43,8 @@ Options:
   -h, --help            Show this help message
   -f, --force           Force rename even if module ID already exists
   -d, --dry-run         Show what would be renamed without making changes
+  -c, --check-all       Check all open PRs for missing/incorrect module IDs
+  --fix-all             Automatically fix all PRs that need module IDs (implies --check-all)
   --ai-agent AGENT      AI agent to use for extraction (claude, opencode, etc.)
   --model MODEL         Model to use for Claude (default: $DEFAULT_CLAUDE_MODEL)
 
@@ -52,6 +56,10 @@ Examples:
   sidekick pr-rename                  # Rename current branch's PR
   sidekick pr-rename 123               # Rename PR #123
   sidekick pr-rename -d                # Dry run to see what would happen
+  sidekick pr-rename -c                # Check all open PRs for missing module IDs
+  sidekick pr-rename -c -d             # Check all PRs without making changes
+  sidekick pr-rename --fix-all         # Fix all PRs that need module IDs
+  sidekick pr-rename --fix-all -d      # Preview what would be fixed
   sidekick pr-rename --ai-agent opencode  # Use opencode for extraction
 
 EOF
@@ -70,6 +78,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        -c|--check-all)
+            CHECK_ALL=true
+            shift
+            ;;
+        --fix-all)
+            FIX_ALL=true
+            CHECK_ALL=true  # fix-all implies check-all
             shift
             ;;
         --ai-agent)
@@ -93,6 +110,201 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Process all open PRs
+process_all_prs() {
+    info "Fetching all open PRs..."
+    
+    # Get all open PRs with their details
+    local pr_list=$(gh pr list --state open --json number,title,headRefName --limit 100 2>/dev/null) || {
+        error "Failed to fetch PR list"
+        return 1
+    }
+    
+    local pr_count=$(echo "$pr_list" | jq 'length')
+    if [[ "$pr_count" -eq 0 ]]; then
+        info "No open PRs found"
+        return 0
+    fi
+    
+    success "Found $pr_count open PRs"
+    echo
+    
+    local checked=0
+    local needs_update=0
+    local updated=0
+    local failed=0
+    
+    # Process each PR
+    echo "$pr_list" | jq -c '.[]' | while IFS= read -r pr_data; do
+        local pr_number=$(echo "$pr_data" | jq -r '.number')
+        local pr_title=$(echo "$pr_data" | jq -r '.title')
+        local pr_branch=$(echo "$pr_data" | jq -r '.headRefName')
+        
+        ((checked++))
+        info "[$checked/$pr_count] Checking PR #$pr_number: $pr_title"
+        
+        # Check if this PR needs updating
+        local module_id=""
+        local existing_id=""
+        local should_update=false
+        
+        # Extract module ID from branch name first
+        if [[ "$pr_branch" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            module_id="M${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+        else
+            # Try to extract from PR body using AI if no branch pattern
+            local pr_body=$(gh pr view "$pr_number" --json body --jq '.body // ""' 2>/dev/null || echo "")
+            if [[ -n "$pr_body" ]]; then
+                module_id=$(extract_module_from_description "$pr_body" "$AI_AGENT" "$CLAUDE_MODEL" 2>/dev/null || echo "")
+            fi
+        fi
+        
+        # Check if title already has a module ID
+        if [[ "$pr_title" =~ (M[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            existing_id="${BASH_REMATCH[1]}"
+        fi
+        
+        # Determine if update is needed
+        if [[ -n "$module_id" ]]; then
+            if [[ -z "$existing_id" ]]; then
+                should_update=true
+                echo "  → Missing module ID, should add: $module_id"
+            elif [[ "$existing_id" != "$module_id" ]]; then
+                should_update=true
+                echo "  → Wrong module ID ($existing_id), should be: $module_id"
+            else
+                echo "  ✓ Already has correct module ID: $existing_id"
+            fi
+        else
+            echo "  ⚠ No module ID found in branch or description"
+        fi
+        
+        if [[ "$should_update" == true ]]; then
+            ((needs_update++))
+            
+            # If fix-all mode, actually update the PR
+            if [[ "$FIX_ALL" == true ]] && [[ "$DRY_RUN" != true ]]; then
+                local new_title=$(echo "$pr_title" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+                new_title="$new_title ($module_id)"
+                
+                if gh pr edit "$pr_number" --title "$new_title" 2>/dev/null; then
+                    success "  ✓ Updated PR #$pr_number title"
+                    ((updated++))
+                else
+                    error "  ✗ Failed to update PR #$pr_number"
+                    ((failed++))
+                fi
+            elif [[ "$FIX_ALL" == true ]] && [[ "$DRY_RUN" == true ]]; then
+                local new_title=$(echo "$pr_title" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+                new_title="$new_title ($module_id)"
+                echo "  → Would update to: $new_title"
+            fi
+        fi
+        
+        echo
+    done
+    
+    # Wait for the subshell to complete and capture the counts
+    # Note: We need to use files to pass data back from the subshell
+    local temp_dir=$(mktemp -d)
+    local count_file="$temp_dir/counts"
+    
+    echo "$pr_list" | jq -c '.[]' | {
+        local checked=0
+        local needs_update=0
+        local updated=0
+        local failed=0
+        
+        while IFS= read -r pr_data; do
+            local pr_number=$(echo "$pr_data" | jq -r '.number')
+            local pr_title=$(echo "$pr_data" | jq -r '.title')
+            local pr_branch=$(echo "$pr_data" | jq -r '.headRefName')
+            
+            ((checked++))
+            
+            # Check if this PR needs updating
+            local module_id=""
+            local existing_id=""
+            local should_update=false
+            
+            # Extract module ID from branch name first
+            if [[ "$pr_branch" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+                module_id="M${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            else
+                # Try to extract from PR body using AI if no branch pattern
+                local pr_body=$(gh pr view "$pr_number" --json body --jq '.body // ""' 2>/dev/null || echo "")
+                if [[ -n "$pr_body" ]]; then
+                    module_id=$(extract_module_from_description "$pr_body" "$AI_AGENT" "$CLAUDE_MODEL" 2>/dev/null || echo "")
+                fi
+            fi
+            
+            # Check if title already has a module ID
+            if [[ "$pr_title" =~ (M[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                existing_id="${BASH_REMATCH[1]}"
+            fi
+            
+            # Determine if update is needed
+            if [[ -n "$module_id" ]]; then
+                if [[ -z "$existing_id" ]] || [[ "$existing_id" != "$module_id" ]]; then
+                    should_update=true
+                fi
+            fi
+            
+            if [[ "$should_update" == true ]]; then
+                ((needs_update++))
+                
+                # If fix-all mode, actually update the PR
+                if [[ "$FIX_ALL" == true ]] && [[ "$DRY_RUN" != true ]]; then
+                    local new_title=$(echo "$pr_title" | sed -E 's/[[:space:]]*\(?M[0-9]+\.[0-9]+\.[0-9]+\)?//g' | sed 's/[[:space:]]*$//')
+                    new_title="$new_title ($module_id)"
+                    
+                    if gh pr edit "$pr_number" --title "$new_title" 2>/dev/null; then
+                        ((updated++))
+                    else
+                        ((failed++))
+                    fi
+                fi
+            fi
+        done
+        
+        echo "$checked:$needs_update:$updated:$failed" > "$count_file"
+    }
+    
+    # Read the results
+    local counts=$(cat "$count_file")
+    rm -rf "$temp_dir"
+    
+    local checked=$(echo "$counts" | cut -d: -f1)
+    local needs_update=$(echo "$counts" | cut -d: -f2)
+    local updated=$(echo "$counts" | cut -d: -f3)
+    local failed=$(echo "$counts" | cut -d: -f4)
+    
+    # Summary
+    echo "=========================================="
+    success "Checked $checked PRs"
+    
+    if [[ "$needs_update" -gt 0 ]]; then
+        warning "$needs_update PRs need module ID updates"
+        
+        if [[ "$FIX_ALL" == true ]]; then
+            if [[ "$DRY_RUN" == true ]]; then
+                info "Run without --dry-run to apply the changes"
+            else
+                success "$updated PRs updated successfully"
+                if [[ "$failed" -gt 0 ]]; then
+                    error "$failed PRs failed to update"
+                fi
+            fi
+        else
+            info "Use --fix-all to automatically update them"
+        fi
+    else
+        success "All PRs have correct module IDs!"
+    fi
+    
+    return 0
+}
+
 # Check if we're in a git repository
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     error "Not in a git repository"
@@ -104,6 +316,12 @@ if ! command -v gh &> /dev/null; then
     error "GitHub CLI (gh) is required but not installed"
     info "Install with: brew install gh"
     exit 1
+fi
+
+# Handle check-all and fix-all modes
+if [[ "$CHECK_ALL" == true ]]; then
+    process_all_prs
+    exit $?
 fi
 
 # Get current branch name if PR number not specified

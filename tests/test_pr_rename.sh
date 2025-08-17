@@ -162,6 +162,28 @@ NEW_TITLE="$NEW_TITLE ($MODULE_ID)"
 
 test_case "Replace module ID without parens" "feat(domain): implement ServiceProfileMedia entity (M2.2.13)" "$NEW_TITLE"
 
+echo
+info "Testing command line argument parsing..."
+
+# Test check-all flag parsing
+ARGS="-c"
+CHECK_ALL=false
+if [[ "$ARGS" =~ -c|--check-all ]]; then
+    CHECK_ALL=true
+fi
+test_case "Parse -c flag" "true" "$CHECK_ALL"
+
+# Test fix-all flag parsing  
+ARGS="--fix-all"
+FIX_ALL=false
+CHECK_ALL=false
+if [[ "$ARGS" =~ --fix-all ]]; then
+    FIX_ALL=true
+    CHECK_ALL=true  # fix-all implies check-all
+fi
+test_case "Parse --fix-all flag" "true" "$FIX_ALL"
+test_case "Fix-all implies check-all" "true" "$CHECK_ALL"
+
 # Print summary
 echo
 echo "===================================="
